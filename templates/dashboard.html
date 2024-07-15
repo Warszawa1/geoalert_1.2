@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - Emergency Alert System</title>
+    <link rel="icon" type="image/png" href="/static/favicon.png">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css" rel="stylesheet">
+</head>
+<body class="bg-gray-100">
+    <div class="container mx-auto px-4 py-8">
+        <h1 class="text-3xl font-bold text-gray-800 mb-6">Welcome, {{ user.username }}!</h1>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="bg-{{ 'green' if category == 'success' else 'red' }}-100 border border-{{ 'green' if category == 'success' else 'red' }}-400 text-{{ 'green' if category == 'success' else 'red' }}-700 px-4 py-3 rounded relative mb-4" role="alert">
+                        <span class="block sm:inline">{{ message }}</span>
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        <div class="mb-4">
+            <button id="editButton" class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline mr-2">Edit Information</button>
+            <button id="viewButton" class="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline">View Dashboard</button>
+        </div>
+
+        <div id="editSection" class="bg-white shadow-md rounded px-8 pt-6 pb-8 mb-4">
+            <h2 class="text-2xl font-semibold text-gray-800 mb-4">Edit Your Information</h2>
+            <form method="POST">
+                <div class="mb-4">
+                    <label class="block text-gray-700 text-sm font-bold mb-2" for="emergency_message">
+                        Emergency Message
+                    </label>
+                    <textarea name="emergency_message" id="emergency_message" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" rows="4">{{ user.emergency_message or '' }}</textarea>
+                </div>
+
+                <div class="mb-4">
+                    <label class="block text-gray-700 text-sm font-bold mb-2" for="emergency_contacts">
+                        Emergency Contacts
+                    </label>
+                    <div id="emergency_contacts_container">
+                        {% if user.emergency_contacts %}
+                            {% for contact in user.emergency_contacts.split(',') %}
+                                <div class="flex mb-2">
+                                    <input type="text" name="emergency_contacts" value="{{ contact }}" class="flex-grow shadow appearance-none border rounded py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline">
+                                    <button type="button" class="remove-contact ml-2 bg-red-500 hover:bg-red-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline">Remove</button>
+                                </div>
+                            {% endfor %}
+                        {% endif %}
+                        <div class="flex mb-2">
+                            <input type="text" name="emergency_contacts" class="flex-grow shadow appearance-none border rounded py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline">
+                            <button type="button" class="remove-contact ml-2 bg-red-500 hover:bg-red-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline">Remove</button>
+                        </div>
+                    </div>
+                    <button type="button" id="add_contact" class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline mt-2">
+                        Add Another Contact
+                    </button>
+                </div>
+
+                <div class="mb-6">
+                    <label class="block text-gray-700 text-sm font-bold mb-2" for="alert_message">
+                        Alert Message
+                    </label>
+                    <textarea name="alert_message" id="alert_message" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" rows="3">{{ user.alert_message or '' }}</textarea>
+                </div>
+
+                <div class="flex items-center justify-between">
+                    <button class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline" type="submit">
+                        Save Changes
+                    </button>
+                </div>
+            </form>
+        </div>
+
+        <div id="viewSection" class="bg-white shadow-md rounded px-8 pt-6 pb-8 mb-4" style="display: none;">
+            <h2 class="text-2xl font-semibold text-gray-800 mb-4">Your Emergency Information</h2>
+            <div class="mb-4">
+                <h3 class="text-xl font-semibold text-gray-700 mb-2">Emergency Message:</h3>
+                <p class="text-gray-600">{{ user.emergency_message or 'Not set' }}</p>
+            </div>
+            <div class="mb-4">
+                <h3 class="text-xl font-semibold text-gray-700 mb-2">Emergency Contacts:</h3>
+                <ul class="list-disc list-inside text-gray-600">
+                    {% if user.emergency_contacts %}
+                        {% for contact in user.emergency_contacts.split(',') %}
+                            <li>{{ contact }}</li>
+                        {% endfor %}
+                    {% else %}
+                        <li>No contacts set</li>
+                    {% endif %}
+                </ul>
+            </div>
+            <div class="mb-4">
+                <h3 class="text-xl font-semibold text-gray-700 mb-2">Alert Message:</h3>
+                <p class="text-gray-600">{{ user.alert_message or 'Not set' }}</p>
+            </div>
+            <div class="mt-6">
+                <h3 class="text-xl font-semibold text-gray-700 mb-2">Your Emergency Link:</h3>
+                <p class="mb-2 text-gray-600">Share this link with trusted contacts. In case of emergency, they can access your vital information:</p>
+                <div class="flex items-center">
+                    <input type="text" value="{{ emergency_link }}" id="emergency-link" readonly class="flex-grow shadow appearance-none border rounded py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline">
+                    <button onclick="copyLink()" class="ml-2 bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline">
+                        Copy
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div class="text-center mt-4">
+            <a href="{{ url_for('logout') }}" class="bg-red-500 hover:bg-red-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline">
+                Logout
+            </a>
+        </div>
+    </div>
+
+    <script>
+        function copyLink() {
+            var copyText = document.getElementById("emergency-link");
+            copyText.select();
+            copyText.setSelectionRange(0, 99999);
+            document.execCommand("copy");
+            alert("Emergency link copied to clipboard!");
+        }
+
+        document.getElementById('add_contact').addEventListener('click', function() {
+            var container = document.getElementById('emergency_contacts_container');
+            var contactDiv = document.createElement('div');
+            contactDiv.className = 'flex mb-2';
+            
+            var newInput = document.createElement('input');
+            newInput.type = 'text';
+            newInput.name = 'emergency_contacts';
+            newInput.className = 'flex-grow shadow appearance-none border rounded py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline';
+            
+            var removeButton = document.createElement('button');
+            removeButton.type = 'button';
+            removeButton.className = 'remove-contact ml-2 bg-red-500 hover:bg-red-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline';
+            removeButton.textContent = 'Remove';
+            
+            contactDiv.appendChild(newInput);
+            contactDiv.appendChild(removeButton);
+            container.appendChild(contactDiv);
+        });
+
+        document.getElementById('emergency_contacts_container').addEventListener('click', function(e) {
+            if (e.target.classList.contains('remove-contact')) {
+                e.target.parentElement.remove();
+            }
+        });
+
+        document.getElementById('editButton').addEventListener('click', function() {
+            document.getElementById('editSection').style.display = 'block';
+            document.getElementById('viewSection').style.display = 'none';
+        });
+
+        document.getElementById('viewButton').addEventListener('click', function() {
+            document.getElementById('editSection').style.display = 'none';
+            document.getElementById('viewSection').style.display = 'block';
+        });
+    </script>
+</body>
+</html>
