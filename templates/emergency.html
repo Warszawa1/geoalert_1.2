@@ -99,7 +99,10 @@
                     displayEmergencyMessage(data.translations);
                     initMap(data.latitude, data.longitude);
                     displayGlucoseChart(data.glucose_readings);
-                    document.getElementById('status').textContent = "Emergency information loaded and alert sent.";
+                    document.getElementById('status').textContent = "Emergency information loaded.";
+                    document.getElementById('alert-status').textContent = data.alert_sent ? 
+                        "Alert sent successfully to emergency contacts." : 
+                        "Failed to send alert to emergency contacts.";
                 } else {
                     throw new Error(data.message || "Unknown error occurred");
                 }
@@ -112,18 +115,18 @@
             });
         }
 
-        function displayEmergencyMessage(translations) {
-            const messageDiv = document.getElementById('emergency-message');
-            messageDiv.innerHTML = '<h2 class="text-xl font-bold mb-2">Emergency Message:</h2>';
-            for (const [lang, translation] of Object.entries(translations)) {
-                messageDiv.innerHTML += `
-                    <div class="bg-white shadow-md rounded px-4 py-2 mb-2">
-                        <h3 class="font-bold">${getLanguageName(lang)}:</h3>
-                        <p>${translation}</p>
-                    </div>
-                `;
-            }
-        }
+                function displayEmergencyMessage(translations) {
+                    const messageDiv = document.getElementById('emergency-message');
+                    messageDiv.innerHTML = '<h2 class="text-xl font-bold mb-2">Emergency Message:</h2>';
+                    for (const [lang, translation] of Object.entries(translations)) {
+                        messageDiv.innerHTML += `
+                            <div class="bg-white shadow-md rounded px-4 py-2 mb-2">
+                                <h3 class="font-bold">${getLanguageName(lang)}:</h3>
+                                <p>${translation}</p>
+                            </div>
+                        `;
+                    }
+                }
 
         function getLanguageName(langCode) {
             const languageNames = {

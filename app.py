@@ -1,8 +1,6 @@
 #V3 with only email alert
 import uuid
 from flask import Flask, render_template, jsonify, request, session, redirect, url_for, flash
-from flask_sqlalchemy import SQLAlchemy
-from flask_migrate import Migrate
 from werkzeug.security import generate_password_hash, check_password_hash
 import json
 import os
@@ -15,8 +13,8 @@ import urllib.parse
 import requests
 from deep_translator import GoogleTranslator
 import time
-from sqlalchemy import func
-
+import psycopg2
+from psycopg2.extras import RealDictCursor
 
 
 load_dotenv()
@@ -24,12 +22,38 @@ load_dotenv()
 #Configure logging
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
 
-
 app = Flask(__name__)
-app.config['SECRET_KEY'] = '12345'  # Change this to a random secret key
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///users.db'
-db = SQLAlchemy(app)
-migrate = Migrate(app, db)
+
+#Configuracion de la base de datos
+DATABASE_URL = os.getenv('DATABASE_URL')
+
+def get_db_connection():
+    conn = psycopg2.connect(DATABASE_URL)
+    return conn, conn.cursor(cursor_factory=RealDictCursor)
+
+def init_db():
+    conn = psycopg2.connect(DATABASE_URL)
+    cur = conn.cursor()
+    try:
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS users (
+                id SERIAL PRIMARY KEY,
+                username VARCHAR(80) UNIQUE NOT NULL,
+                password VARCHAR(120) NOT NULL,
+                emergency_message TEXT,
+                emergency_contacts TEXT,
+                alert_message TEXT,
+                share_token VARCHAR(36) UNIQUE NOT NULL
+            )
+        ''')
+        conn.commit()
+        print("Database initialized successfully")
+    except psycopg2.Error as e:
+        print(f"An error occurred while initializing the database: {e}")
+        conn.rollback()
+    finally:
+        cur.close()
+        conn.close()
 
 
 #Env variables
@@ -47,7 +71,7 @@ COUNTRY_LANGUAGES = {
 translations = {
     'en': {
         'title': 'Emergency Alert System',
-        'subtitle': 'Be prepared, stay safe',
+        'subtitle': '⚠️',
         'description': "It does not matter who you are, your circumstances, or what you need help with. We all need assistance at some point, and that is why I created this web.",
         'hope_message': "I hope you never need it, but in case you ever do, I wish it makes it all a bit easier.",
         'how_it_works': 'How it works:',
@@ -62,9 +86,9 @@ translations = {
     },
     'es': {
         'title': 'Sistema de Alerta de Emergencia',
-        'subtitle': 'Esté preparado, manténgase seguro',
-        'description': "No importa quién seas, tus circunstancias o con qué necesitas ayuda. Todos necesitamos asistencia en algún momento, y es por eso he creado esta web.",
-        'hope_message': "Espero que nunca la necesites, pero en caso de que alguna vez lo hagas, deseo que te facilite un poco las cosas.",
+        'subtitle': '⚠️',
+        'description': "No importa quién seas, tus circunstancias o con qué necesitas ayuda. Todos necesitamos asistencia en algún momento, y por eso he creado esta web.",
+        'hope_message': "Espero que nunca la necesites, pero en caso de que alguna vez lo hagas, que te facilite las cosas.",
         'how_it_works': 'Cómo funciona:',
         'step1': 'Regístrate para obtener una cuenta',
         'step2': 'Configura tu información de emergencia y contactos',
@@ -73,26 +97,9 @@ translations = {
         'login': 'Iniciar sesión',
         'register': 'Registrarse',
         'footer_made_with': 'Hecho con',
-        'footer_for': 'para quien lo necesite.'
+        'footer_for': 'por IreAV'
     }
 }
-
-
-
-
-class User(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    username = db.Column(db.String(80), unique=True, nullable=False)
-    password = db.Column(db.String(120), nullable=False)
-    emergency_message = db.Column(db.Text)
-    emergency_contacts = db.Column(db.Text)  # Store as JSON string
-    alert_message = db.Column(db.Text)
-    share_token = db.Column(db.String(36), unique=True, nullable=False)
-
-    def __init__(self, *args, **kwargs):
-        super(User, self).__init__(*args, **kwargs)
-        if not self.share_token:
-            self.share_token = str(uuid.uuid4())
 
 
 def get_google_maps_link(lat, lon):
@@ -131,6 +138,57 @@ def translate_message(message, target_languages):
             except Exception as e:
                 logging.error(f"Translation error for {lang}: {str(e)}")
     return translations
+
+def create_user(username, password, share_token):
+    conn, cur = get_db_connection()
+    try:
+        cur.execute(
+            "INSERT INTO users (username, password, share_token) VALUES (%s, %s, %s)",
+            (username, password, share_token)
+        )
+        conn.commit()
+    except psycopg2.errors.UniqueViolation:
+        conn.rollback()
+        raise ValueError("Username already exists")
+    except psycopg2.Error as e:
+        conn.rollback()
+        raise ValueError(f"Database error: {str(e)}")
+    finally:
+        cur.close()
+        conn.close()
+
+def get_user(username):
+    conn, cur = get_db_connection()
+    try:
+        cur.execute("SELECT * FROM users WHERE username = %s", (username,))
+        user = cur.fetchone()
+        return user
+    finally:
+        cur.close()
+        conn.close()
+
+def get_user_by_id(user_id):
+    conn, cur = get_db_connection()
+    try:
+        cur.execute("SELECT * FROM users WHERE id = %s", (user_id,))
+        user = cur.fetchone()
+        return user
+    finally:
+        cur.close()
+        conn.close()
+
+
+def update_user(user_id, emergency_message, emergency_contacts, alert_message):
+    conn, cur = get_db_connection()
+    try:
+        cur.execute(
+            "UPDATE users SET emergency_message = %s, emergency_contacts = %s, alert_message = %s WHERE id = %s",
+            (emergency_message, emergency_contacts, alert_message, user_id)
+        )
+        conn.commit()
+    finally:
+        cur.close()
+        conn.close()
     
 
 
@@ -151,27 +209,30 @@ def get_emergency_info():
     try:
         data = request.json
         username = data.get('username')
-        lat = data['latitude']
-        lon = data['longitude']
+        lat = data.get('latitude')
+        lon = data.get('longitude')
+
+        if not all([username, lat, lon]):
+            return jsonify({"status": "error", "message": "Missing required information"}), 400
 
         app.logger.info(f"Received request for user: {username}, lat: {lat}, lon: {lon}")
 
-        user = User.query.filter_by(username=username).first()
+        user = get_user(username)
         if not user:
             app.logger.warning(f"Invalid username: {username}")
             return jsonify({"status": "error", "message": "Invalid username"}), 404
 
-        logging.info(f"Fetching emergency info for user: {user.username}, location: {lat}, {lon}")
+        logging.info(f"Fetching emergency info for user: {user['username']}, location: {lat}, {lon}")
         
         country_code = get_country_code(lat, lon)
         if not country_code:
             country_code = 'CH'  # Default to Switzerland if detection fails
         
         target_languages = COUNTRY_LANGUAGES.get(country_code, ['en'])
-        translations = translate_message(user.emergency_message or EMERGENCY_MESSAGE, target_languages)
+        translations = translate_message(user['emergency_message'] or EMERGENCY_MESSAGE, target_languages)
         
         # Send alert
-        send_alert(user, lat, lon)
+        alert_sent = send_alert(user, lat, lon)
         
         return jsonify({
             "status": "success", 
@@ -179,7 +240,8 @@ def get_emergency_info():
             "country_code": country_code,
             "latitude": lat,
             "longitude": lon,
-            "glucose_readings": GLUCOSE_READINGS  # You might want to make this user-specific too
+            "glucose_readings": GLUCOSE_READINGS,
+            "alert_sent": alert_sent
         })
     except Exception as e:
         logging.error(f"Error in get_emergency_info: {str(e)}")
@@ -195,13 +257,14 @@ GLUCOSE_READINGS = [
     {"time": "2024-07-12 19:10:43", "value": 115},
     {"time": "2024-07-12 19:05:43", "value": 114},
     {"time": "2024-07-12 19:00:44", "value": 113},
-    {"time": "2024-07-12 18:55:43", "value": 114},
-    {"time": "2024-07-12 18:50:44", "value": 116},
-    {"time": "2024-07-12 18:45:43", "value": 118},
-    {"time": "2024-07-12 18:40:43", "value": 124},
-    {"time": "2024-07-12 18:35:43", "value": 129},
-    {"time": "2024-07-12 18:30:43", "value": 130}
+    {"time": "2024-07-12 18:55:43", "value": 101},
+    {"time": "2024-07-12 18:50:44", "value": 84},
+    {"time": "2024-07-12 18:45:43", "value": 70},
+    {"time": "2024-07-12 18:40:43", "value": 62},
+    {"time": "2024-07-12 18:35:43", "value": 50},
+    {"time": "2024-07-12 18:30:43", "value": 45}
 ]
+
 
 @app.route('/register', methods=['GET', 'POST'])
 def register():
@@ -209,11 +272,17 @@ def register():
         username = request.form['username']
         password = request.form['password']
         hashed_password = generate_password_hash(password)
-        new_user = User(username=username, password=hashed_password)
-        db.session.add(new_user)
-        db.session.commit()
-        flash('Registration successful. Please log in.', 'success')
-        return redirect(url_for('login'))
+        share_token = str(uuid.uuid4())
+        
+        try:
+            create_user(username, hashed_password, share_token)
+            flash('Registration successful. Please log in.', 'success')
+            return redirect(url_for('login'))
+        except ValueError as e:
+            flash(str(e), 'error')
+        except Exception as e:
+            flash('An unexpected error occurred. Please try again.', 'error')
+            app.logger.error(f'Error during registration: {str(e)}')
     return render_template('register.html')
 
 
@@ -222,15 +291,14 @@ def login():
     if request.method == 'POST':
         username = request.form['username']
         password = request.form['password']
-        user = User.query.filter_by(username=username).first()
-        if user and check_password_hash(user.password, password):
-            session['user_id'] = user.id
+        
+        user = get_user(username)
+        if user and check_password_hash(user['password'], password):
+            session['user_id'] = user['id']
             flash('Logged in successfully.', 'success')
             return redirect(url_for('dashboard'))
         flash('Invalid username or password', 'error')
     return render_template('login.html')
-
-
 
 @app.route('/dashboard', methods=['GET', 'POST'])
 def dashboard():
@@ -238,22 +306,22 @@ def dashboard():
         flash('Please log in to access the dashboard.', 'error')
         return redirect(url_for('login'))
     
-    user = User.query.get(session['user_id'])
+    user = get_user_by_id(session['user_id'])
     if user is None:
         session.pop('user_id', None)
         flash('User not found. Please log in again.', 'error')
         return redirect(url_for('login'))
     
     if request.method == 'POST':
-        user.emergency_message = request.form['emergency_message']
-        emergency_contacts = request.form.getlist('emergency_contacts')
-        user.emergency_contacts = ','.join(filter(None, [contact.strip() for contact in emergency_contacts]))
-        user.alert_message = request.form['alert_message']
-        db.session.commit()
+        emergency_message = request.form['emergency_message']
+        emergency_contacts = ','.join(filter(None, [contact.strip() for contact in request.form.getlist('emergency_contacts')]))
+        alert_message = request.form['alert_message']
+        
+        update_user(user['id'], emergency_message, emergency_contacts, alert_message)
         flash('Your information has been updated successfully!', 'success')
         return redirect(url_for('dashboard'))
     
-    emergency_link = url_for('emergency', username=user.username, _external=True)
+    emergency_link = url_for('emergency', username=user['username'], _external=True)
     return render_template('dashboard.html', user=user, emergency_link=emergency_link)
 
 
@@ -264,33 +332,34 @@ def logout():
     return redirect(url_for('index'))
 
     
-
 @app.route('/get_location', methods=['POST'])
 def get_location():
-    # TODO: Implement logic to get or receive user's location
-    # This could involve getting data from the request if sent from the client
-    # or implementing server-side geolocation
-    latitude = 0  # placeholder
-    longitude = 0  # placeholder
+    data = request.json
+    latitude = data.get('latitude')
+    longitude = data.get('longitude')
+    if latitude is None or longitude is None:
+        return jsonify({'error': 'Latitude and longitude are required'}), 400
     return jsonify({'latitude': latitude, 'longitude': longitude})
-
 
 
 @app.route('/send_alert', methods=['POST'])
 def send_alert(user, lat, lon):
     try:
         maps_link = get_google_maps_link(lat, lon)
-        alert_message = f"Emergency Alert: {user.username} needs help. Type 1 Diabetes.\nLocation: {lat}, {lon}\n"
-        alert_message += f"Google Maps Link: {maps_link}"
-        if user.alert_message:
-            alert_message += f"\n\nCustom message: {user.alert_message}"
+        alert_message = f"Emergency Alert: {user['username']} needs help. Type 1 Diabetes.\n"
+        alert_message += f"Location: {lat}, {lon}\n"
+        alert_message += f"Google Maps Link: {maps_link}\n"
+        if user['alert_message']:
+            alert_message += f"\nCustom message: {user['alert_message']}"
         
-        send_email_alert(alert_message, user.emergency_contacts)
+        send_email_alert(alert_message, user['emergency_contacts'])
         
-        logging.info(f"Alert sent successfully for user {user.username}")
+        logging.info(f"Alert sent successfully for user {user['username']}")
+        return True
     except Exception as e:
-        logging.error(f"Error in send_alert for user {user.username}: {str(e)}")
-        raise
+        logging.error(f"Error in send_alert for user {user['username']}: {str(e)}")
+        return False
+
 
 def send_email_alert(message, emergency_contacts):
     try:
@@ -312,15 +381,12 @@ def send_email_alert(message, emergency_contacts):
     except Exception as e:
         logging.error(f"Failed to send email: {str(e)}")
         raise
-    
 
 
-
-def init_db():
-    with app.app_context():
-        db.create_all()
+app.secret_key = os.getenv('SECRET_KEY', 'your_fallback_secret_key')
 
 if __name__ == '__main__':
-    init_db()
+    with app.app_context():
+        init_db()
     app.run(debug=True)
 
