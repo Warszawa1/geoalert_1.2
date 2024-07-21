@@ -3,7 +3,6 @@ body {
     text-align: center; 
     padding: 20px; 
 }
-
         
 #status { 
     margin-top: 20px; 
@@ -90,3 +89,37 @@ body {
     font-size: 18px;
     margin-top: 10px;
 }
+
+.login-form {
+    max-width: 400px;
+    margin: 0 auto;
+  }
+  
+  input {
+    width: 100%;
+    padding: 10px;
+    margin-bottom: 15px;
+  }
+  
+  .password-input {
+    position: relative;
+  }
+  
+.toggle-password {
+    position: absolute;
+    right: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: none;
+    border: none;
+    cursor: pointer;
+  }
+  
+  .login-button {
+    width: 100%;
+    padding: 10px;
+    background-color: #00a76f;
+    color: white;
+    border: none;
+    cursor: pointer;
+  }

@@ -2,6 +2,7 @@
 import uuid
 from flask import Flask, render_template, jsonify, request, session, redirect, url_for, flash
 from werkzeug.security import generate_password_hash, check_password_hash
+from authlib.integrations.flask_client import OAuth
 import json
 import os
 from dotenv import load_dotenv
@@ -23,6 +24,66 @@ load_dotenv()
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
 
 app = Flask(__name__)
+app.secret_key = os.getenv('SECRET_KEY', 'your_fallback_secret_key')
+oauth = OAuth(app)
+
+
+google = oauth.register(
+    name='google',
+    client_id=os.getenv("GOOGLE_CLIENT_ID"),
+    client_secret=os.getenv("GOOGLE_CLIENT_SECRET"),
+    server_metadata_url='https://accounts.google.com/.well-known/openid-configuration',
+    client_kwargs={
+        'scope': 'openid email profile',
+        'token_endpoint_auth_method': 'client_secret_basic'
+    },
+    authorize_url='https://accounts.google.com/o/oauth2/auth',
+    authorize_params=None,
+    token_url='https://oauth2.googleapis.com/token',
+    userinfo_endpoint='https://openidconnect.googleapis.com/v1/userinfo',
+    jwks_uri='https://www.googleapis.com/oauth2/v3/certs',
+)
+
+@app.route('/login/google')
+def login_google():
+    redirect_uri = url_for('authorized', _external=True)
+    app.logger.debug(f"Initiating Google login. Redirect URI: {redirect_uri}")
+    return google.authorize_redirect(redirect_uri)
+
+# In the authorized route, add these lines at the beginning:
+app.logger.debug(f"Google client config: {google.client_kwargs}")
+app.logger.debug(f"Google server metadata: {google.server_metadata}")
+
+@app.route('/login/google/authorized')
+def authorized():
+    try:
+        app.logger.debug("Entering authorized route")
+        token = google.authorize_access_token()
+        app.logger.debug(f"Received token: {token}")
+        
+        resp = google.get('https://openidconnect.googleapis.com/v1/userinfo')
+        app.logger.debug(f"Userinfo response: {resp.json()}")
+        
+        if resp.ok:
+            user_info = resp.json()
+            email = user_info['email']
+            
+            # Check if user exists, if not, create a new user
+            user = get_user(email)
+            if not user:
+                create_user(email, 'google_user', str(uuid.uuid4()))
+            
+            session['user_id'] = user['id']
+            flash('Logged in successfully with Google.', 'success')
+            return redirect(url_for('dashboard'))
+        else:
+            app.logger.error(f"Failed to fetch user info: {resp.text}")
+            flash('Failed to get user info from Google.', 'error')
+            return redirect(url_for('login'))
+    except Exception as e:
+        app.logger.error(f"Error in Google authorization: {str(e)}", exc_info=True)
+        flash('An error occurred during Google login. Please try again.', 'error')
+        return redirect(url_for('login'))
 
 #Configuracion de la base de datos
 DATABASE_URL = os.getenv('DATABASE_URL')
@@ -240,7 +301,7 @@ def get_emergency_info():
             "country_code": country_code,
             "latitude": lat,
             "longitude": lon,
-            "glucose_readings": GLUCOSE_READINGS,
+            # "glucose_readings": GLUCOSE_READINGS,
             "alert_sent": alert_sent
         })
     except Exception as e:
@@ -249,21 +310,21 @@ def get_emergency_info():
     
 
 
-# Add this glucose data
-GLUCOSE_READINGS = [
-    {"time": "2024-07-12 19:25:43", "value": 120},
-    {"time": "2024-07-12 19:20:43", "value": 119},
-    {"time": "2024-07-12 19:15:43", "value": 116},
-    {"time": "2024-07-12 19:10:43", "value": 115},
-    {"time": "2024-07-12 19:05:43", "value": 114},
-    {"time": "2024-07-12 19:00:44", "value": 113},
-    {"time": "2024-07-12 18:55:43", "value": 101},
-    {"time": "2024-07-12 18:50:44", "value": 84},
-    {"time": "2024-07-12 18:45:43", "value": 70},
-    {"time": "2024-07-12 18:40:43", "value": 62},
-    {"time": "2024-07-12 18:35:43", "value": 50},
-    {"time": "2024-07-12 18:30:43", "value": 45}
-]
+# # Add this glucose data
+# GLUCOSE_READINGS = [
+#     {"time": "2024-07-12 19:25:43", "value": 120},
+#     {"time": "2024-07-12 19:20:43", "value": 119},
+#     {"time": "2024-07-12 19:15:43", "value": 116},
+#     {"time": "2024-07-12 19:10:43", "value": 115},
+#     {"time": "2024-07-12 19:05:43", "value": 114},
+#     {"time": "2024-07-12 19:00:44", "value": 113},
+#     {"time": "2024-07-12 18:55:43", "value": 101},
+#     {"time": "2024-07-12 18:50:44", "value": 84},
+#     {"time": "2024-07-12 18:45:43", "value": 70},
+#     {"time": "2024-07-12 18:40:43", "value": 62},
+#     {"time": "2024-07-12 18:35:43", "value": 50},
+#     {"time": "2024-07-12 18:30:43", "value": 45}
+# ]
 
 
 @app.route('/register', methods=['GET', 'POST'])
@@ -271,6 +332,12 @@ def register():
     if request.method == 'POST':
         username = request.form['username']
         password = request.form['password']
+        confirm_password = request.form['confirm_password']
+
+        if password != confirm_password:
+            flash('Passwords do not match', 'error')
+            return redirect(url_for('register'))
+
         hashed_password = generate_password_hash(password)
         share_token = str(uuid.uuid4())
         
@@ -285,13 +352,11 @@ def register():
             app.logger.error(f'Error during registration: {str(e)}')
     return render_template('register.html')
 
-
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
         username = request.form['username']
         password = request.form['password']
-        
         user = get_user(username)
         if user and check_password_hash(user['password'], password):
             session['user_id'] = user['id']
