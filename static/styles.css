@@ -14,11 +14,20 @@ body {
     color: red; 
 }
 
-#map { 
-    height: 300px; 
-    width: 100%; 
-    margin-top: 20px; 
+/* Default styles for larger screens (like laptops) */
+#map {
+    height: 150px;
+    width: 50%;
+    margin-top: 20px;
 }
+
+/* Styles for smaller screens (like phones) */
+@media (max-width: 768px) {
+    #map {
+        width: 100%;
+    }
+}
+
 
 #emergency-message { 
     margin-top: 20px; 
@@ -123,3 +132,11 @@ body {
     border: none;
     cursor: pointer;
   }
+
+
+  body { font-family: Arial, sans-serif; margin: 20px; }
+  #current-glucose { font-size: 48px; font-weight: bold; text-align: center; margin: 20px 0; }
+  #chart-container { width: 80%; margin: auto; }
+  .flash-message { padding: 10px; margin-bottom: 10px; border-radius: 5px; }
+  .flash-error { background-color: #ffcccc; color: #cc0000; }
+  .flash-warning { background-color: #fff3cd; color: #856404; }

@@ -1,0 +1,36 @@
+@font-face {
+    font-family: 'OpenDyslexic';
+    src: url('fonts/OpenDyslexic-Regular.otf') format('opentype');
+    font-weight: normal;
+    font-style: normal;
+}
+
+@font-face {
+    font-family: 'OpenDyslexic';
+    src: url('fonts/OpenDyslexic-Bold.otf') format('opentype');
+    font-weight: bold;
+    font-style: normal;
+}
+
+body.dyslexia-friendly {
+    font-family: 'OpenDyslexic', Arial, sans-serif;
+    font-size: 18px;
+    line-height: 2;
+    color: #000;
+    background-color: #ffffd9;
+}
+
+.dyslexia-friendly h1, .dyslexia-friendly h2, .dyslexia-friendly h3 {
+    font-weight: bold;
+    margin-top: 1em;
+    margin-bottom: 0.5em;
+}
+
+.dyslexia-friendly p {
+    margin-bottom: 1.5em;
+}
+
+.dyslexia-friendly a {
+    color: #0000ff;
+    text-decoration: underline;
+}

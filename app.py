@@ -7,6 +7,7 @@ import json
 import os
 from dotenv import load_dotenv
 import smtplib
+import ssl
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 import logging
@@ -16,6 +17,9 @@ from deep_translator import GoogleTranslator
 import time
 import psycopg2
 from psycopg2.extras import RealDictCursor
+from pydexcom import Dexcom
+from datetime import date
+from email.message import EmailMessage
 
 
 load_dotenv()
@@ -24,8 +28,57 @@ load_dotenv()
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
 
 app = Flask(__name__)
-app.secret_key = os.getenv('SECRET_KEY', 'your_fallback_secret_key')
+# app.secret_key = os.getenv('SECRET_KEY', 'your_fallback_secret_key')
 oauth = OAuth(app)
+app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'your_fallback_secret_key')  # Replace with a real secret key
+app.config['MAIL_SERVER'] = os.getenv('MAIL_SERVER')
+app.config['MAIL_PORT'] = int(os.getenv('MAIL_PORT'))
+app.config['MAIL_USE_TLS'] = os.getenv('MAIL_USE_TLS', 'True').lower() == 'true'
+app.config['MAIL_USERNAME'] = os.getenv('EMAIL_ADDRESS')
+app.config['MAIL_PASSWORD'] = os.getenv('EMAIL_PASSWORD')
+app.config['MAIL_DEFAULT_SENDER'] = os.getenv('EMAIL_ADDRESS')
+
+
+def create_email_message(subject, body, to_email):
+    msg = EmailMessage()
+    msg.set_content(body)
+    msg['Subject'] = subject
+    msg['From'] = app.config['MAIL_USERNAME']
+    msg['To'] = to_email
+    return msg
+
+def send_email(msg):
+    try:
+        logging.debug("Attempting to send email")
+        context = ssl.create_default_context()
+        with smtplib.SMTP_SSL('smtp.gmail.com', 465, context=context) as smtp:
+            smtp.login(app.config['MAIL_USERNAME'], app.config['MAIL_PASSWORD'])
+            smtp.send_message(msg)
+        logging.debug("Email sent successfully")
+        return True
+    except Exception as e:
+        logging.error(f"Failed to send email: {str(e)}")
+        return False
+
+@app.route('/about', methods=['GET', 'POST'])
+def about():
+    if request.method == 'POST':
+        name = request.form.get('name')
+        email = request.form.get('email')
+        message = request.form.get('message')
+        
+        subject = "New Contact Form Submission"
+        body = f"Name: {name}\nEmail: {email}\nMessage: {message}"
+        to_email = app.config['MAIL_DEFAULT_SENDER']
+        
+        msg = create_email_message(subject, body, to_email)
+        
+        if send_email(msg):
+            flash('Thank you for your message! We\'ll get back to you soon.', 'success')
+        else:
+            flash('An error occurred while sending your message. Please try again later.', 'error')
+        
+    return render_template('about.html', dyslexia_friendly=session.get('dyslexia_friendly', False))
 
 
 google = oauth.register(
@@ -104,7 +157,11 @@ def init_db():
                 emergency_message TEXT,
                 emergency_contacts TEXT,
                 alert_message TEXT,
-                share_token VARCHAR(36) UNIQUE NOT NULL
+                share_token VARCHAR(36) UNIQUE NOT NULL,
+                is_diabetic BOOLEAN DEFAULT FALSE,
+                uses_dexcom BOOLEAN DEFAULT FALSE,
+                dexcom_username VARCHAR(80),
+                dexcom_password VARCHAR(120)
             )
         ''')
         conn.commit()
@@ -218,20 +275,29 @@ def create_user(username, password, share_token):
         cur.close()
         conn.close()
 
+
 def get_user(username):
     conn, cur = get_db_connection()
     try:
         cur.execute("SELECT * FROM users WHERE username = %s", (username,))
         user = cur.fetchone()
-        return user
+        if user:
+            # Convert the result to a dictionary for easier access
+            user_dict = dict(user)
+            return user_dict
+        return None
+    except Exception as e:
+        print(f"Error fetching user data: {e}")
+        return None
     finally:
         cur.close()
         conn.close()
 
+
 def get_user_by_id(user_id):
     conn, cur = get_db_connection()
     try:
-        cur.execute("SELECT * FROM users WHERE id = %s", (user_id,))
+        cur.execute("SELECT id, username, emergency_message, emergency_contacts, is_diabetic, alert_message, is_diabetic, uses_dexcom, dexcom_username, dexcom_password FROM users WHERE id = %s", (user_id,))
         user = cur.fetchone()
         return user
     finally:
@@ -239,30 +305,113 @@ def get_user_by_id(user_id):
         conn.close()
 
 
-def update_user(user_id, emergency_message, emergency_contacts, alert_message):
+def update_user(user_id, emergency_message, emergency_contacts, alert_message, is_diabetic, uses_dexcom, dexcom_username, dexcom_password):
     conn, cur = get_db_connection()
     try:
-        cur.execute(
-            "UPDATE users SET emergency_message = %s, emergency_contacts = %s, alert_message = %s WHERE id = %s",
-            (emergency_message, emergency_contacts, alert_message, user_id)
-        )
+        query = """
+        UPDATE users SET 
+            emergency_message = %s, 
+            emergency_contacts = %s, 
+            alert_message = %s,
+            is_diabetic = %s,
+            uses_dexcom = %s,
+            dexcom_username = %s,
+            dexcom_password = %s
+        WHERE id = %s
+        """
+        cur.execute(query, (
+            emergency_message,
+            emergency_contacts,
+            alert_message,
+            is_diabetic,
+            uses_dexcom,
+            dexcom_username,
+            dexcom_password,
+            user_id
+        ))
         conn.commit()
+        logging.info(f"User {user_id} updated successfully")
+    except Exception as e:
+        conn.rollback()
+        logging.error(f"Error updating user {user_id}: {str(e)}")
+        raise
     finally:
         cur.close()
         conn.close()
+
+
+def get_dexcom_data(username, password):
+    try:
+        logging.debug(f"Attempting to create Dexcom instance for user: {username}")
+        
+        dexcom = Dexcom(username=username, password=password, ous=True)
+        
+        logging.debug("Dexcom instance created successfully. Fetching glucose readings.")
+        glucose_readings = dexcom.get_glucose_readings(minutes=60)
+
+        formatted_readings = []
+        for bg_value in glucose_readings:
+            formatted_readings.append({
+                'time': bg_value.datetime.strftime('%Y-%m-%d %H:%M:%S'),
+                'value': bg_value.value,
+                'trend': bg_value.trend_arrow
+            })
+
+        logging.info(f"Successfully fetched {len(formatted_readings)} Dexcom readings")
+        return formatted_readings, None
+    except AttributeError as e:
+        logging.error(f"AttributeError in get_dexcom_data: {str(e)}", exc_info=True)
+        return None, f"The Pydexcom library interface has changed. Error: {str(e)}"
+    except Exception as e:
+        logging.error(f"Error in get_dexcom_data: {str(e)}", exc_info=True)
+        return None, str(e)
     
 
 
 @app.route('/')
 def index():
+    dyslexia_friendly = session.get('dyslexia_friendly', False)
+
     lang = request.args.get('lang', 'en')
     if lang not in translations:
         lang = 'en'
-    return render_template('index.html', t=translations[lang], lang=lang)
+        user = {
+        'is_diabetic': True,
+        'uses_dexcom': False
+    }
+    return render_template('index.html', dyslexia_friendly=dyslexia_friendly, t=translations[lang], lang=lang)
+
+
+@app.route('/toggle_dyslexia_friendly')
+def toggle_dyslexia_friendly():
+    session['dyslexia_friendly'] = not session.get('dyslexia_friendly', False)
+    return redirect(request.referrer or url_for('index'))
+
 
 @app.route('/emergency')
 def emergency():
-    return render_template('emergency.html')
+    username = request.args.get('username')
+
+    user = get_user(username)
+    if not user:
+        return "User not found", 404
+    
+    dexcom_readings = None
+    if user.get('is_diabetic') and user.get('uses_dexcom'):
+        dexcom_username = user.get('dexcom_username')
+        dexcom_password = user.get('dexcom_password')
+        if dexcom_username and dexcom_password:
+            logging.debug(f"Attempting to fetch Dexcom data for user {user['username']}")
+            dexcom_readings, error = get_dexcom_data(dexcom_username, dexcom_password)
+            if error:
+                flash(f'Error fetching Dexcom data: {error}', 'error')
+                logging.error(f"Dexcom data fetch error for user {user['username']}: {error}")
+            elif dexcom_readings:
+                dexcom_readings = dexcom_readings[-12:]
+        else:
+            flash('Dexcom credentials are not set. Please update your profile.', 'warning')
+
+    return render_template('emergency.html', user=user, dexcom_readings=dexcom_readings)
 
 
 @app.route('/get_emergency_info', methods=['POST'])
@@ -276,15 +425,10 @@ def get_emergency_info():
         if not all([username, lat, lon]):
             return jsonify({"status": "error", "message": "Missing required information"}), 400
 
-        app.logger.info(f"Received request for user: {username}, lat: {lat}, lon: {lon}")
-
         user = get_user(username)
         if not user:
-            app.logger.warning(f"Invalid username: {username}")
             return jsonify({"status": "error", "message": "Invalid username"}), 404
 
-        logging.info(f"Fetching emergency info for user: {user['username']}, location: {lat}, {lon}")
-        
         country_code = get_country_code(lat, lon)
         if not country_code:
             country_code = 'CH'  # Default to Switzerland if detection fails
@@ -292,39 +436,34 @@ def get_emergency_info():
         target_languages = COUNTRY_LANGUAGES.get(country_code, ['en'])
         translations = translate_message(user['emergency_message'] or EMERGENCY_MESSAGE, target_languages)
         
-        # Send alert
-        alert_sent = send_alert(user, lat, lon)
+        # Get Dexcom data if user is diabetic and uses Dexcom
+        glucose_readings = None
+        if user['is_diabetic'] and user['uses_dexcom']:
+            glucose_readings, error = get_dexcom_data(user['dexcom_username'], user['dexcom_password'])
+            if error:
+                logging.error(f"Error fetching Dexcom data: {error}")
+            else:
+                logging.info(f"Successfully fetched Dexcom data: {glucose_readings}")
         
-        return jsonify({
+        # Send alert
+        alert_sent = send_alert(user, lat, lon, glucose_readings)
+        
+        response_data = {
             "status": "success", 
             "translations": translations,
             "country_code": country_code,
             "latitude": lat,
             "longitude": lon,
-            # "glucose_readings": GLUCOSE_READINGS,
+            "glucose_readings": glucose_readings,
             "alert_sent": alert_sent
-        })
+        }
+        
+        logging.info(f"Sending emergency info response: {response_data}")
+        
+        return jsonify(response_data)
     except Exception as e:
         logging.error(f"Error in get_emergency_info: {str(e)}")
         return jsonify({"status": "error", "message": str(e)}), 500
-    
-
-
-# # Add this glucose data
-# GLUCOSE_READINGS = [
-#     {"time": "2024-07-12 19:25:43", "value": 120},
-#     {"time": "2024-07-12 19:20:43", "value": 119},
-#     {"time": "2024-07-12 19:15:43", "value": 116},
-#     {"time": "2024-07-12 19:10:43", "value": 115},
-#     {"time": "2024-07-12 19:05:43", "value": 114},
-#     {"time": "2024-07-12 19:00:44", "value": 113},
-#     {"time": "2024-07-12 18:55:43", "value": 101},
-#     {"time": "2024-07-12 18:50:44", "value": 84},
-#     {"time": "2024-07-12 18:45:43", "value": 70},
-#     {"time": "2024-07-12 18:40:43", "value": 62},
-#     {"time": "2024-07-12 18:35:43", "value": 50},
-#     {"time": "2024-07-12 18:30:43", "value": 45}
-# ]
 
 
 @app.route('/register', methods=['GET', 'POST'])
@@ -365,30 +504,6 @@ def login():
         flash('Invalid username or password', 'error')
     return render_template('login.html')
 
-@app.route('/dashboard', methods=['GET', 'POST'])
-def dashboard():
-    if 'user_id' not in session:
-        flash('Please log in to access the dashboard.', 'error')
-        return redirect(url_for('login'))
-    
-    user = get_user_by_id(session['user_id'])
-    if user is None:
-        session.pop('user_id', None)
-        flash('User not found. Please log in again.', 'error')
-        return redirect(url_for('login'))
-    
-    if request.method == 'POST':
-        emergency_message = request.form['emergency_message']
-        emergency_contacts = ','.join(filter(None, [contact.strip() for contact in request.form.getlist('emergency_contacts')]))
-        alert_message = request.form['alert_message']
-        
-        update_user(user['id'], emergency_message, emergency_contacts, alert_message)
-        flash('Your information has been updated successfully!', 'success')
-        return redirect(url_for('dashboard'))
-    
-    emergency_link = url_for('emergency', username=user['username'], _external=True)
-    return render_template('dashboard.html', user=user, emergency_link=emergency_link)
-
 
 @app.route('/logout')
 def logout():
@@ -396,7 +511,66 @@ def logout():
     flash('You have been logged out.', 'success')
     return redirect(url_for('index'))
 
+
+@app.route('/dashboard', methods=['GET', 'POST'])
+def dashboard():
+    user = get_user_by_id(session['user_id'])
+    if user is None:
+        session.pop('user_id', None)
+        flash('User not found. Please log in again.', 'error')
+        return redirect(url_for('login'))
     
+    # Debug logging
+    logging.debug(f"User data: {user}")
+    logging.debug(f"Is diabetic: {user.get('is_diabetic')}")
+    logging.debug(f"Uses Dexcom: {user.get('uses_dexcom')}")
+    logging.debug(f"Dexcom username: {user.get('dexcom_username')}")
+    logging.debug(f"Dexcom password: {'*****' if user.get('dexcom_password') else 'Not set'}")
+
+    dexcom_readings = None
+    if user.get('is_diabetic') and user.get('uses_dexcom'):
+        dexcom_username = user.get('dexcom_username')
+        dexcom_password = user.get('dexcom_password')
+        if dexcom_username and dexcom_password:
+            logging.debug(f"Attempting to fetch Dexcom data for user {user['username']}")
+            dexcom_readings, error = get_dexcom_data(dexcom_username, dexcom_password)
+            if error:
+                flash(f'Error fetching Dexcom data: {error}', 'error')
+                logging.error(f"Dexcom data fetch error for user {user['username']}: {error}")
+            elif dexcom_readings:
+                dexcom_readings = dexcom_readings[-12:]
+        else:
+            flash('Dexcom credentials are not set. Please update your profile.', 'warning')
+
+    
+    if request.method == 'POST':
+        # Handle form submission
+        emergency_message = request.form.get('emergency_message', '')
+        emergency_contacts = ','.join(filter(None, [contact.strip() for contact in request.form.getlist('emergency_contacts')]))
+        alert_message = request.form.get('alert_message', '')
+        is_diabetic = 'is_diabetic' in request.form
+        uses_dexcom = 'uses_dexcom' in request.form
+        dexcom_username = request.form.get('dexcom_username', '')
+        dexcom_password = request.form.get('dexcom_password', '')
+        
+        # Debug logging for form submission
+        logging.debug(f"Form data - is_diabetic: {is_diabetic}, uses_dexcom: {uses_dexcom}")
+        logging.debug(f"Dexcom username provided: {'Yes' if dexcom_username else 'No'}")
+        logging.debug(f"Dexcom password provided: {'Yes' if dexcom_password else 'No'}")
+        
+        try:
+            update_user(user['id'], emergency_message, emergency_contacts, alert_message, is_diabetic, uses_dexcom, dexcom_username, dexcom_password)
+            flash('Your information has been updated successfully!', 'success')
+        except Exception as e:
+            flash(f'An error occurred while updating your information: {str(e)}', 'error')
+        
+        return redirect(url_for('dashboard'))
+
+    emergency_link = url_for('emergency', username=user['username'], _external=True)
+    return render_template('dashboard.html', user=user, emergency_link=emergency_link, dexcom_readings=dexcom_readings)
+
+
+
 @app.route('/get_location', methods=['POST'])
 def get_location():
     data = request.json
@@ -407,13 +581,19 @@ def get_location():
     return jsonify({'latitude': latitude, 'longitude': longitude})
 
 
-@app.route('/send_alert', methods=['POST'])
-def send_alert(user, lat, lon):
+def send_alert(user, lat, lon, glucose_readings=None):
     try:
         maps_link = get_google_maps_link(lat, lon)
-        alert_message = f"Emergency Alert: {user['username']} needs help. Type 1 Diabetes.\n"
+        alert_message = f"Emergency Alert: {user['username']} needs help.\n"
+        if user['is_diabetic']:
+            alert_message += "Type 1 Diabetes.\n"
         alert_message += f"Location: {lat}, {lon}\n"
         alert_message += f"Google Maps Link: {maps_link}\n"
+        
+        if glucose_readings:
+            latest_reading = glucose_readings[0]
+            alert_message += f"\nLatest glucose reading: {latest_reading['value']} mg/dL at {latest_reading['time']}\n"
+        
         if user['alert_message']:
             alert_message += f"\nCustom message: {user['alert_message']}"
         

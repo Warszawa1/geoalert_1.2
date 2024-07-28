@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Emergency Glucose View</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 0; padding: 20px; background-color: #f0f0f0; }
+        h1 { text-align: center; color: #333; }
+        #current-glucose { font-size: 48px; font-weight: bold; text-align: center; margin: 20px 0; }
+        .low-glucose { color: #d9534f; }
+        .normal-glucose { color: #5cb85c; }
+        .high-glucose { color: #f0ad4e; }
+        #chart-container { background-color: white; padding: 20px; border-radius: 10px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
+        canvas { display: block; margin: 0 auto; }
+    </style>
+</head>
+<body>
+    <h1>Emergency Glucose View</h1>
+    <div id="current-glucose"></div>
+    <div id="chart-container">
+        <canvas id="glucoseChart" width="600" height="300"></canvas>
+    </div>
+
+    <script>
+    function getColor(value) {
+        if (value <= 70) return '#d9534f'; // Red for low
+        if (value <= 180) return '#5cb85c'; // Green for normal
+        return '#f0ad4e'; // Orange for high
+    }
+
+    function updateView(data) {
+        const currentGlucoseElement = document.getElementById('current-glucose');
+        const latestReading = data[0];
+        currentGlucoseElement.textContent = `Current: ${latestReading.value} mg/dL`;
+        currentGlucoseElement.className = latestReading.value <= 70 ? 'low-glucose' : 
+                                          latestReading.value <= 180 ? 'normal-glucose' : 'high-glucose';
+
+        const canvas = document.getElementById('glucoseChart');
+        const ctx = canvas.getContext('2d');
+        const width = canvas.width;
+        const height = canvas.height;
+        const padding = 40;
+        const chartWidth = width - padding * 2;
+        const chartHeight = height - padding * 2;
+
+        ctx.clearRect(0, 0, width, height);
+
+        // Draw background
+        const gradient = ctx.createLinearGradient(0, padding, 0, height - padding);
+        gradient.addColorStop(0, 'rgba(217, 83, 79, 0.1)');   // Light red for high
+        gradient.addColorStop(0.4, 'rgba(92, 184, 92, 0.1)'); // Light green for normal
+        gradient.addColorStop(1, 'rgba(217, 83, 79, 0.1)');   // Light red for low
+        ctx.fillStyle = gradient;
+        ctx.fillRect(padding, padding, chartWidth, chartHeight);
+
+        // Find min and max glucose values
+        const values = data.map(reading => reading.value);
+        const minGlucose = Math.min(20, ...values);
+        const maxGlucose = Math.max(350, ...values);
+        const range = maxGlucose - minGlucose;
+
+        // Draw axes
+        ctx.beginPath();
+        ctx.moveTo(padding, padding);
+        ctx.lineTo(padding, height - padding);
+        ctx.lineTo(width - padding, height - padding);
+        ctx.strokeStyle = '#666';
+        ctx.stroke();
+
+        // Draw bars
+        const barWidth = chartWidth / data.length - 2;
+        data.forEach((reading, index) => {
+            const x = padding + index * (barWidth + 2);
+            const barHeight = (reading.value - minGlucose) / range * chartHeight;
+            const y = height - padding - barHeight;
+
+            ctx.fillStyle = getColor(reading.value);
+            ctx.fillRect(x, y, barWidth, barHeight);
+
+            // Add value label on top of each bar
+            ctx.fillStyle = '#333';
+            ctx.font = '10px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText(reading.value, x + barWidth / 2, y - 5);
+        });
+
+        // Add labels and guidelines
+        ctx.fillStyle = '#333';
+        ctx.font = '12px Arial';
+        ctx.textAlign = 'right';
+        ctx.fillText(`${maxGlucose} mg/dL`, padding - 5, padding);
+        ctx.fillText(`${minGlucose} mg/dL`, padding - 5, height - padding);
+
+        // Guidelines for low and high
+        ctx.beginPath();
+        ctx.setLineDash([5, 5]);
+        ctx.moveTo(padding, height - padding - ((70 - minGlucose) / range * chartHeight));
+        ctx.lineTo(width - padding, height - padding - ((70 - minGlucose) / range * chartHeight));
+        ctx.moveTo(padding, height - padding - ((180 - minGlucose) / range * chartHeight));
+        ctx.lineTo(width - padding, height - padding - ((180 - minGlucose) / range * chartHeight));
+        ctx.strokeStyle = '#999';
+        ctx.stroke();
+        ctx.setLineDash();
+
+        // Time labels
+        ctx.textAlign = 'center';
+        ctx.fillText(data[0].time, padding, height - padding + 15);
+        ctx.fillText(data[data.length - 1].time, width - padding, height - padding + 15);
+    }
+
+    // Fetch data and update view
+    fetch('/emergency_glucose_data')
+        .then(response => response.json())
+        .then(data => updateView(data))
+        .catch(error => console.error('Error fetching glucose data:', error));
+    </script>
+</body>
+</html>
