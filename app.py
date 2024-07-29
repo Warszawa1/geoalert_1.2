@@ -20,6 +20,7 @@ from psycopg2.extras import RealDictCursor
 from pydexcom import Dexcom
 from datetime import date
 from email.message import EmailMessage
+from contextlib import closing
 
 
 load_dotenv()
@@ -277,6 +278,8 @@ def translate_message(message, target_languages):
                 logging.error(f"Translation error for {lang}: {str(e)}")
     return translations
 
+
+
 def create_user(username, password, share_token):
     conn, cur = get_db_connection()
     try:
@@ -491,27 +494,35 @@ def register():
     if request.method == 'POST':
         username = request.form['username']
         password = request.form['password']
-        confirm_password = request.form['confirm_password']
         hashed_password = generate_password_hash(password)
+        share_token = str(uuid.uuid4())
 
         try:
-            conn = psycopg2.connect(DATABASE_URL)
-            cur = conn.cursor()
-            cur.execute("INSERT INTO users (username, password) VALUES (%s, %s)", (username, hashed_password))
-            conn.commit()
+            with closing(psycopg2.connect(DATABASE_URL)) as conn:
+                with conn.cursor() as cur:
+                    # Check if username already exists
+                    cur.execute("SELECT * FROM users WHERE username = %s", (username,))
+                    if cur.fetchone() is not None:
+                        flash('Username already exists. Please choose a different one.', 'error')
+                        return redirect(url_for('register'))
+                    
+                    # Insert new user
+                    cur.execute("INSERT INTO users (username, password, share_token) VALUES (%s, %s, %s)", 
+                                (username, hashed_password, share_token))
+                conn.commit()
             flash('Registration successful! Please log in.', 'success')
             return redirect(url_for('login'))
         except psycopg2.Error as e:
-            conn.rollback()
             flash(f'Registration failed: {str(e)}', 'error')
-        finally:
-            cur.close()
-            conn.close()
-    
+
     return render_template('register.html')
+    
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
+    lang = request.args.get('lang', 'en')
+    if lang not in translations:
+        lang = 'en'
     if request.method == 'GET':
     # Elimina los mensajes flash existentes cuando se accede de nuevo
         session.pop('_flashes', None)
@@ -542,7 +553,8 @@ def login():
             cur.close()
             conn.close()
     
-    return render_template('login.html')
+    return render_template('login.html', t=translations[lang], lang=lang)
+
 
 
 @app.route('/logout')
