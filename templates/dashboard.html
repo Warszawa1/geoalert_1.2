@@ -110,12 +110,12 @@
             margin-right: 5px;
         }
 
-        footer {
+        /* footer {
             flex-shrink: 0;
             background-color: white;
             bottom: 0;
             width: 100%;
-        }
+        } */
         @keyframes pulse {
             0%, 100% { transform: scale(1); }
             50% { transform: scale(1.25); }
@@ -125,7 +125,7 @@
         }
     </style>
 </head>
-<body class="bg-gray-100">
+<body class="flex flex-col min-h-screen bg-white-100">
     <div class="container mx-auto px-4 py-8">
         <h1 class="text-3xl font-bold text-gray-800 mb-6">Welcome, {{ user.username }}!</h1>
 
@@ -229,10 +229,6 @@
                 </div>
             </form>
         </div> 
-        
-
-        
-
 
         <div id="viewSection" class="bg-white shadow-md rounded px-8 pt-6 pb-8 mb-4" style="display: none;">
             <h2 class="text-2xl font-semibold text-gray-800 mb-4">Your Emergency Information</h2>
@@ -269,14 +265,13 @@
         </div>
         
 
-        <div class="glucose-section mt-6">
-            <h3 class="text-xl font-semibold text-gray-700 mb-2">Glucose Readings</h3>
+        <div class="glucose-section mt-6">    
             <p id="toggle-glucose-readings" class="text-blue-600 hover:text-blue-800 cursor-pointer underline">
                 Check my Dexcom connection and readings
             </p>
-            
+            <!-- <h3 class="text-xl font-semibold text-gray-700 mb-2">Glucose Readings</h3> -->
             <div id="glucose-readings-content" class="hidden mt-4">
-                <div class="recent-readings mb-6">
+                <!-- <div class="recent-readings mb-6">
                     <h4 class="text-lg font-semibold text-gray-700 mb-2">Recent Readings</h4>
                     {% if dexcom_readings %}
                         <div class="current-glucose">
@@ -314,7 +309,7 @@
                     {% else %}
                         <p class="text-gray-600">No recent readings available.</p>
                     {% endif %}
-                </div>
+                </div> -->
         
                 <div class="detailed-readings">
                     <h4 class="text-lg font-semibold text-gray-700 mb-2">Detailed Readings</h4>
@@ -364,11 +359,20 @@
         </div>
     </div>
 
-        <footer class="bg-white">
+        <!-- <footer class="bg-white">
             <div class="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
                 <p class="text-center text-sm text-gray-500">
                     Made with <span class="text-blue-500 pulse-animation inline-block">♥</span> by IreAV
                     <br>© <span id="current-year"></span>
+                </p>
+            </div>
+        </footer> -->
+
+        <footer class="bg-white">
+            <div class="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8 relative z-0">
+                <p class="text-center text-sm text-gray-500">
+                    Made with <span class="text-blue-500 pulse-animation inline-block">♥</span> 
+                    <br>© 2024 IreAV. All rights reserved.
                 </p>
             </div>
         </footer>
@@ -479,6 +483,7 @@
                     : 'Hide Dexcom readings';
             });
         });
+
         document.getElementById('current-year').textContent = new Date().getFullYear();
 
 

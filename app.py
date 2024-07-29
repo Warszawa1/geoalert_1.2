@@ -38,6 +38,41 @@ app.config['MAIL_USERNAME'] = os.getenv('EMAIL_ADDRESS')
 app.config['MAIL_PASSWORD'] = os.getenv('EMAIL_PASSWORD')
 app.config['MAIL_DEFAULT_SENDER'] = os.getenv('EMAIL_ADDRESS')
 
+#Configuracion de la base de datos
+DATABASE_URL = os.getenv('DATABASE_URL')
+
+def get_db_connection():
+    conn = psycopg2.connect(DATABASE_URL)
+    return conn, conn.cursor(cursor_factory=RealDictCursor)
+
+def init_db():
+    conn = psycopg2.connect(DATABASE_URL)
+    cur = conn.cursor()
+    try:
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS users (
+                id SERIAL PRIMARY KEY,
+                username VARCHAR(80) UNIQUE NOT NULL,
+                password VARCHAR(255) NOT NULL,
+                emergency_message TEXT,
+                emergency_contacts TEXT,
+                alert_message TEXT,
+                share_token VARCHAR(36) UNIQUE NOT NULL,
+                is_diabetic BOOLEAN DEFAULT FALSE,
+                uses_dexcom BOOLEAN DEFAULT FALSE,
+                dexcom_username VARCHAR(80),
+                dexcom_password VARCHAR(120)
+            )
+        ''')
+        conn.commit()
+        print("Database initialized successfully")
+    except psycopg2.Error as e:
+        print(f"An error occurred while initializing the database: {e}")
+        conn.rollback()
+    finally:
+        cur.close()
+        conn.close()
+
 
 def create_email_message(subject, body, to_email):
     msg = EmailMessage()
@@ -120,15 +155,35 @@ def authorized():
         if resp.ok:
             user_info = resp.json()
             email = user_info['email']
+            app.logger.debug(f"Attempting to get or create user for email: {email}")
             
-            # Check if user exists, if not, create a new user
+            # Try to get the user first
             user = get_user(email)
-            if not user:
-                create_user(email, 'google_user', str(uuid.uuid4()))
+            app.logger.debug(f"Result of get_user: {user}")
             
-            session['user_id'] = user['id']
-            flash('Logged in successfully with Google.', 'success')
-            return redirect(url_for('dashboard'))
+            if not user:
+                app.logger.debug(f"User not found, attempting to create new user")
+                # If user doesn't exist, create a new one
+                share_token = str(uuid.uuid4())
+                try:
+                    create_user(email, 'google_user', share_token)
+                    app.logger.debug(f"New user created successfully")
+                    user = get_user(email)
+                    app.logger.debug(f"Fetched newly created user: {user}")
+                except ValueError as e:
+                    app.logger.error(f"Failed to create new user: {str(e)}")
+                    flash('Failed to create new user account.', 'error')
+                    return redirect(url_for('login'))
+            
+            if user:
+                session['user_id'] = user['id']
+                app.logger.debug(f"User logged in successfully. User ID: {user['id']}")
+                flash('Logged in successfully with Google.', 'success')
+                return redirect(url_for('dashboard'))
+            else:
+                app.logger.error(f"Failed to retrieve or create user for email: {email}")
+                flash('Failed to retrieve or create user account.', 'error')
+                return redirect(url_for('login'))
         else:
             app.logger.error(f"Failed to fetch user info: {resp.text}")
             flash('Failed to get user info from Google.', 'error')
@@ -137,41 +192,6 @@ def authorized():
         app.logger.error(f"Error in Google authorization: {str(e)}", exc_info=True)
         flash('An error occurred during Google login. Please try again.', 'error')
         return redirect(url_for('login'))
-
-#Configuracion de la base de datos
-DATABASE_URL = os.getenv('DATABASE_URL')
-
-def get_db_connection():
-    conn = psycopg2.connect(DATABASE_URL)
-    return conn, conn.cursor(cursor_factory=RealDictCursor)
-
-def init_db():
-    conn = psycopg2.connect(DATABASE_URL)
-    cur = conn.cursor()
-    try:
-        cur.execute('''
-            CREATE TABLE IF NOT EXISTS users (
-                id SERIAL PRIMARY KEY,
-                username VARCHAR(80) UNIQUE NOT NULL,
-                password VARCHAR(120) NOT NULL,
-                emergency_message TEXT,
-                emergency_contacts TEXT,
-                alert_message TEXT,
-                share_token VARCHAR(36) UNIQUE NOT NULL,
-                is_diabetic BOOLEAN DEFAULT FALSE,
-                uses_dexcom BOOLEAN DEFAULT FALSE,
-                dexcom_username VARCHAR(80),
-                dexcom_password VARCHAR(120)
-            )
-        ''')
-        conn.commit()
-        print("Database initialized successfully")
-    except psycopg2.Error as e:
-        print(f"An error occurred while initializing the database: {e}")
-        conn.rollback()
-    finally:
-        cur.close()
-        conn.close()
 
 
 #Env variables
@@ -472,43 +492,63 @@ def register():
         username = request.form['username']
         password = request.form['password']
         confirm_password = request.form['confirm_password']
-
-        if password != confirm_password:
-            flash('Passwords do not match', 'error')
-            return redirect(url_for('register'))
-
         hashed_password = generate_password_hash(password)
-        share_token = str(uuid.uuid4())
-        
+
         try:
-            create_user(username, hashed_password, share_token)
-            flash('Registration successful. Please log in.', 'success')
+            conn = psycopg2.connect(DATABASE_URL)
+            cur = conn.cursor()
+            cur.execute("INSERT INTO users (username, password) VALUES (%s, %s)", (username, hashed_password))
+            conn.commit()
+            flash('Registration successful! Please log in.', 'success')
             return redirect(url_for('login'))
-        except ValueError as e:
-            flash(str(e), 'error')
-        except Exception as e:
-            flash('An unexpected error occurred. Please try again.', 'error')
-            app.logger.error(f'Error during registration: {str(e)}')
+        except psycopg2.Error as e:
+            conn.rollback()
+            flash(f'Registration failed: {str(e)}', 'error')
+        finally:
+            cur.close()
+            conn.close()
+    
     return render_template('register.html')
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
+    if request.method == 'GET':
+    # Elimina los mensajes flash existentes cuando se accede de nuevo
+        session.pop('_flashes', None)
     if request.method == 'POST':
         username = request.form['username']
         password = request.form['password']
-        user = get_user(username)
-        if user and check_password_hash(user['password'], password):
-            session['user_id'] = user['id']
-            flash('Logged in successfully.', 'success')
-            return redirect(url_for('dashboard'))
-        flash('Invalid username or password', 'error')
+        
+        try:
+            conn = psycopg2.connect(DATABASE_URL)
+            cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+            cur.execute("SELECT * FROM users WHERE username = %s", (username,))
+            user = cur.fetchone()
+            
+            if user and check_password_hash(user['password'], password):
+                session['user_id'] = user['id']
+                flash('Logged in successfully!', 'success')
+                return redirect(url_for('dashboard'))
+            else:
+                flash('Invalid username or password', 'error')
+                app.logger.error(f"Login failed for user: {username}")
+                if user:
+                    app.logger.error(f"Stored hash: {user['password']}")
+                    app.logger.error(f"Provided password hash: {generate_password_hash(password)}")
+        except psycopg2.Error as e:
+            flash(f'Login failed: {str(e)}', 'error')
+            app.logger.error(f"Database error during login: {str(e)}")
+        finally:
+            cur.close()
+            conn.close()
+    
     return render_template('login.html')
 
 
 @app.route('/logout')
 def logout():
-    session.pop('user_id', None)
-    flash('You have been logged out.', 'success')
+    session.clear() # Esto borra todos los datos de la sesion
+    flash('You have been logged out. See you soon! ☺️', 'success')
     return redirect(url_for('index'))
 
 

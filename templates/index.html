@@ -15,7 +15,7 @@
 
         .handwritten-link {
             font-family: 'Caveat', cursive;
-            font-size: 1.25rem;
+            font-size: 1.3rem;
             color: #555;
             text-decoration: none;
             border-bottom: 1px solid transparent;
@@ -30,7 +30,7 @@
             width: 100%;
             height: 1px;
             bottom: -1px;
-            left: 0;
+            left: 5px;;
             background-color: #555;
             transform: scaleX(0);
             transform-origin: bottom right;
@@ -83,16 +83,16 @@
 <body class="bg-white-100 flex flex-col min-h-screen {% if dyslexia_friendly %}dyslexia-friendly{% endif %}">
     
 {% block content %}
-<div class="absolute top-4 left-2">
-    <a href="{{ url_for('about') }}" class="handwritten-link">About us</a>
-
-    <!-- <button id="dyslexia-toggle" 
-        class="w-11 h-11 rounded-full text-xs font-bold focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors duration-200 ease-in-out {{ 'bg-gray-200 text-gray-700' if not dyslexia_friendly else 'bg-yellow-400 text-yellow-900' }}"
-        aria-label="Toggle dyslexia-friendly mode">
-        {{ 'Dx off' if not dyslexia_friendly else 'Dx on' }}
-    </button> -->
-    </div>
+<div class="absolute top-4 left-4">
+    <a href="{{ url_for('about') }}" class="handwritten-link">About</a>
+</div>
+    
     <div class="absolute top-4 right-4">
+        <button id="dyslexia-toggle" 
+            class="handwritten-link py-2 px-4 rounded focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors duration-200 ease-in-out {{ 'bg-white-100 text-gray-700' if not dyslexia_friendly else 'bg-yellow-400 text-yellow-900' }}"
+            aria-label="Toggle dyslexia-friendly mode">
+            {{ 'Dx' if not dyslexia_friendly else 'Dx on' }}
+        </button>
         {% if lang == 'en' %}
             <a href="{{ url_for('index', lang='es') }}" id="boton-espanol" class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">ES</a>
         {% else %}
@@ -114,6 +114,18 @@
             </div>
         </header>
     </div>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+        <div id="flash-message" class="rounded top-16 left-16 right-16 z-50">
+            {% for category, message in messages %}
+                <div class="p-4 {% if category == 'error' %}bg-red-100 text-red-700{% elif category == 'success' %}bg-green-100 text-green-700{% else %}bg-blue-100 text-blue-700{% endif %}">
+                    {{ message }}
+                </div>
+            {% endfor %}
+        </div>
+    {% endif %}
+{% endwith %}
 
     <main class="bg-white shadow-md rounded px-8 pt-6 pb-8 mb-4">
         <div class="mb-6 text-gray-700">
@@ -149,6 +161,13 @@
         <img src="/static/mascota.png" alt="Search dog on map" class="w-11/12 sm:w-4/5 md:w-3/4 lg:w-3/5 xl:w-1/2 h-auto object-cover mx-auto mb-0 relative z-48 opacity-85"
         />
     </div>
+    <!-- <footer class="bg-white" >
+        <div class="max-w-7xl text-center py-6 px-4 sm:px-6 lg:px-8 relative z-0">
+                Made with <span class="text-blue-500 pulse-animation inline-block">♥</span> 
+                <br>© 2024 IreAV. All rights reserved.
+            </p>
+        </div>
+    </footer> -->
     <footer class="bg-white">
         <div class="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8 relative z-0">
             <p class="text-center text-sm text-gray-500">
@@ -166,6 +185,14 @@
                 .then(() => location.reload());
         });
     });
+    setTimeout(function() {
+                var flashMessage = document.getElementById('flash-message');
+                flashMessage.style.transition = 'opacity 1s';
+                flashMessage.style.opacity = '0';
+                setTimeout(function() {
+                    flashMessage.style.display = 'none';
+                }, 1000);
+            }, 5000);  // 5000 milliseconds = 5 seconds
     document.addEventListener('DOMContentLoaded', function() {
     const alertIcon = document.querySelector('.flex.items-center svg');
     alertIcon.classList.add('pulse-animation');
