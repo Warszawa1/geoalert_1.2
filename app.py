@@ -494,7 +494,7 @@ def register():
     if request.method == 'POST':
         username = request.form['username']
         password = request.form['password']
-        hashed_password = generate_password_hash(password)[:120]
+        hashed_password = generate_password_hash(password)
         share_token = str(uuid.uuid4())
 
         try:
