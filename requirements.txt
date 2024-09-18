@@ -10,6 +10,7 @@ click==8.1.7
 deep-translator==1.11.4
 Flask==3.0.3
 Flask-Migrate==4.0.7
+Flask-socketio==5.3.6
 geographiclib==2.0
 geopy==2.4.1
 gunicorn==22.0.0
@@ -39,3 +40,4 @@ soupsieve==2.5
 typing_extensions==4.12.2
 urllib3==2.2.2
 Werkzeug==3.0.3
+

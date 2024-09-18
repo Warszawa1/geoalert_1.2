@@ -1,10 +1,12 @@
-#V3 with only email alert
+#V6 with email alert, dexcom integration, dinamic map, optional sms,
 import uuid
 from flask import Flask, render_template, jsonify, request, session, redirect, url_for, flash
+from flask_socketio import SocketIO, emit, join_room, leave_room
 from werkzeug.security import generate_password_hash, check_password_hash
 from authlib.integrations.flask_client import OAuth
 import json
 import os
+import re
 from dotenv import load_dotenv
 import smtplib
 import ssl
@@ -22,15 +24,20 @@ from datetime import date
 from email.message import EmailMessage
 from contextlib import closing
 
+from database import init_db, get_user, get_user_by_id, update_user
+
 
 load_dotenv()
 
 #Configure logging
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
-# app.secret_key = os.getenv('SECRET_KEY', 'your_fallback_secret_key')
+app.secret_key = os.getenv('SECRET_KEY', 'your_fallback_secret_key')
 oauth = OAuth(app)
+socketio = SocketIO(app, manage_session=False)
+
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'your_fallback_secret_key')  # Replace with a real secret key
 app.config['MAIL_SERVER'] = os.getenv('MAIL_SERVER')
 app.config['MAIL_PORT'] = int(os.getenv('MAIL_PORT'))
@@ -38,6 +45,15 @@ app.config['MAIL_USE_TLS'] = os.getenv('MAIL_USE_TLS', 'True').lower() == 'true'
 app.config['MAIL_USERNAME'] = os.getenv('EMAIL_ADDRESS')
 app.config['MAIL_PASSWORD'] = os.getenv('EMAIL_PASSWORD')
 app.config['MAIL_DEFAULT_SENDER'] = os.getenv('EMAIL_ADDRESS')
+
+# Infobip configuration
+INFOBIP_API_KEY = os.getenv('INFOBIP_API_KEY')
+INFOBIP_BASE_URL = os.getenv('INFOBIP_BASE_URL')
+INFOBIP_SENDER = os.getenv('INFOBIP_SENDER')
+
+# Ensure the base URL has a scheme
+if INFOBIP_BASE_URL and not INFOBIP_BASE_URL.startswith(('http://', 'https://')):
+    INFOBIP_BASE_URL = f'https://{INFOBIP_BASE_URL}'
 
 #Configuracion de la base de datos
 DATABASE_URL = os.getenv('DATABASE_URL')
@@ -207,38 +223,89 @@ COUNTRY_LANGUAGES = {
     'PL': ['pl']  # Poland
 }
 
+
+LANGUAGE_INFO = {
+    'bg': {'name': 'Български', 'flag': '🇧🇬'},  # Bulgarian
+    'hr': {'name': 'Hrvatski', 'flag': '🇭🇷'},  # Croatian
+    'cs': {'name': 'Čeština', 'flag': '🇨🇿'},  # Czech
+    'da': {'name': 'Dansk', 'flag': '🇩🇰'},  # Danish
+    'nl': {'name': 'Nederlands', 'flag': '🇳🇱'},  # Dutch
+    'en': {'name': 'English', 'flag': '🇬🇧'},  # English
+    'et': {'name': 'Eesti', 'flag': '🇪🇪'},  # Estonian
+    'fi': {'name': 'Suomi', 'flag': '🇫🇮'},  # Finnish
+    'fr': {'name': 'Français', 'flag': '🇫🇷'},  # French
+    'de': {'name': 'Deutsch', 'flag': '🇩🇪'},  # German
+    'el': {'name': 'Ελληνικά', 'flag': '🇬🇷'},  # Greek
+    'hu': {'name': 'Magyar', 'flag': '🇭🇺'},  # Hungarian
+    'ga': {'name': 'Gaeilge', 'flag': '🇮🇪'},  # Irish
+    'it': {'name': 'Italiano', 'flag': '🇮🇹'},  # Italian
+    'lv': {'name': 'Latviešu', 'flag': '🇱🇻'},  # Latvian
+    'lt': {'name': 'Lietuvių', 'flag': '🇱🇹'},  # Lithuanian
+    'mt': {'name': 'Malti', 'flag': '🇲🇹'},  # Maltese
+    'pl': {'name': 'Polski', 'flag': '🇵🇱'},  # Polish
+    'pt': {'name': 'Português', 'flag': '🇵🇹'},  # Portuguese
+    'ro': {'name': 'Română', 'flag': '🇷🇴'},  # Romanian
+    'sk': {'name': 'Slovenčina', 'flag': '🇸🇰'},  # Slovak
+    'sl': {'name': 'Slovenščina', 'flag': '🇸🇮'},  # Slovenian
+    'es': {'name': 'Español', 'flag': '🇪🇸'},  # Spanish
+    'sv': {'name': 'Svenska', 'flag': '🇸🇪'},  # Swedish
+}
+
+
 translations = {
     'en': {
         'title': 'Emergency Alert System',
         'subtitle': '⚠️',
         'description': "It does not matter who you are, your circumstances, or what you need help with. We all need assistance at some point, and that is why I created this web.",
-        'hope_message': "I hope you never need it, but in case you ever do, I wish it makes it all a bit easier.",
+        # 'hope_message': "I hope you never need it, but in case you ever do, I wish it makes it all a bit easier.",
         'how_it_works': 'How it works:',
-        'step1': 'Register for an account',
-        'step2': 'Set up your emergency information and contacts',
-        'step3': 'Get a shareable emergency link',
-        'step4': 'In case of emergency, your link can be accessed to display vital information and alert your contacts',
+        'step1': 'Register for an account.',
+        'step2': 'Set up your emergency information and contacts.',
+        'step3': 'In case you have diabetes and a dexcom sensor, enter your credentials.',
+        'step4': 'Get a shareable emergency link on your view dashboard section.',
+        'step5': 'In case of emergency, your link can be accessed to display vital information and alert your contacts.',
         'login': 'Login',
         'register': 'Register',
+        'home': 'Home',
+        'username': 'Username',
+        'password': 'Password',
+        'confirm_password': 'Confirm Password',
+        'dont_have_account': "Don't have an account? Register",
+        'already_have_account': "Already have an account? Login",
+        'sign_in_with_google': 'Sign in with Google',
         'footer_made_with': 'Made with',
-        'footer_for': 'by IreAV'
+        'footer_for': '© 2024 IreAV. All rights reserved.'
     },
     'es': {
         'title': 'Sistema de Alerta de Emergencia',
         'subtitle': '⚠️',
-        'description': "No importa quién seas, tus circunstancias o con qué necesitas ayuda. Todos necesitamos asistencia en algún momento, y por eso he creado esta web.",
-        'hope_message': "Espero que nunca la necesites, pero en caso de que alguna vez lo hagas, que te facilite las cosas.",
+        'description': "No importa quién seas, tus circunstancias o con que necesitas ayuda. Todos necesitamos asistencia en algún momento, y por eso he creado esta web.",
+        # 'hope_message': "Espero que nunca la necesites, pero en caso de que alguna vez lo hagas, que te facilite las cosas.",
         'how_it_works': 'Cómo funciona:',
-        'step1': 'Regístrate para obtener una cuenta',
-        'step2': 'Configura tu información de emergencia y contactos',
-        'step3': 'Obtén el enlace de emergencia para compartir',
-        'step4': 'En caso de emergencia, se puede acceder a tu enlace para mostrar información vital y alertar a tus contactos',
+        'step1': 'Regístrate para obtener una cuenta.',
+        'step2': 'Configura tu información de emergencia y contactos.',
+        'step3': 'En caso de que tengas diabetes y un sensor Dexcom, ingresa tu usuario y contraseña.',
+        'step4': 'Obtén el enlace de emergencia para compartir.',
+        'step5': 'En caso de emergencia, se puede acceder a tu enlace para mostrar información vital y alertar a tus contactos.',
         'login': 'Iniciar sesión',
         'register': 'Registrarse',
+        'home': 'Inicio',
+        'username': 'Nombre de usuario',
+        'password': 'Contraseña',
+        'confirm_password': 'Confirmar contraseña',
+        'dont_have_account': '¿No tienes una cuenta? Regístrate',
+        'already_have_account': '¿Ya tienes una cuenta? Inicia sesión',
+        'sign_in_with_google': 'Iniciar sesión con Google',
         'footer_made_with': 'Hecho con',
-        'footer_for': 'por IreAV'
+        'footer_for': '© 2024 IreAV. Todos los derechos reservados.'
     }
 }
+
+
+@app.route('/change_language/<lang>')
+def change_language(lang):
+    session['lang'] = lang
+    return redirect(request.referrer or url_for('index'))
 
 
 def get_google_maps_link(lat, lon):
@@ -320,7 +387,7 @@ def get_user(username):
 def get_user_by_id(user_id):
     conn, cur = get_db_connection()
     try:
-        cur.execute("SELECT id, username, emergency_message, emergency_contacts, is_diabetic, alert_message, is_diabetic, uses_dexcom, dexcom_username, dexcom_password FROM users WHERE id = %s", (user_id,))
+        cur.execute("SELECT id, username, emergency_message, emergency_contacts, emergency_contact_phone, is_diabetic, alert_message, is_diabetic, uses_dexcom, dexcom_username, dexcom_password, enable_sms_alerts FROM users WHERE id = %s", (user_id,))
         user = cur.fetchone()
         return user
     finally:
@@ -328,28 +395,32 @@ def get_user_by_id(user_id):
         conn.close()
 
 
-def update_user(user_id, emergency_message, emergency_contacts, alert_message, is_diabetic, uses_dexcom, dexcom_username, dexcom_password):
+def update_user(user_id, emergency_message, emergency_contacts, emergency_contact_phones, alert_message, is_diabetic, uses_dexcom, dexcom_username, dexcom_password, enable_sms_alerts):
     conn, cur = get_db_connection()
     try:
         query = """
         UPDATE users SET 
             emergency_message = %s, 
             emergency_contacts = %s, 
+            emergency_contact_phone = %s,
             alert_message = %s,
             is_diabetic = %s,
             uses_dexcom = %s,
             dexcom_username = %s,
-            dexcom_password = %s
+            dexcom_password = %s,
+            enable_sms_alerts = %s
         WHERE id = %s
         """
         cur.execute(query, (
             emergency_message,
-            emergency_contacts,
+            emergency_contacts, 
+            emergency_contact_phones,
             alert_message,
             is_diabetic,
             uses_dexcom,
             dexcom_username,
             dexcom_password,
+            enable_sms_alerts,
             user_id
         ))
         conn.commit()
@@ -388,7 +459,7 @@ def get_dexcom_data(username, password):
     except Exception as e:
         logging.error(f"Error in get_dexcom_data: {str(e)}", exc_info=True)
         return None, str(e)
-    
+
 
 
 @app.route('/')
@@ -410,54 +481,131 @@ def toggle_dyslexia_friendly():
     session['dyslexia_friendly'] = not session.get('dyslexia_friendly', False)
     return redirect(request.referrer or url_for('index'))
 
+def generate_emergency_token():
+    return str(uuid.uuid4())
+
+def update_user_emergency_token(user_id, token):
+    conn, cur = get_db_connection()
+    try:
+        cur.execute("UPDATE users SET emergency_token = %s WHERE id = %s", (token, user_id))
+        conn.commit()
+    finally:
+        cur.close()
+        conn.close()
+
+def get_user_by_emergency_token(token):
+    conn = get_db_connection()
+    try:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute("SELECT * FROM users WHERE emergency_token = %s", (token,))
+            user = cur.fetchone()
+        return user
+    finally:
+        conn.close()
+
+@app.route('/emergency_contact/<token>')
+def emergency_contact(token):
+    user = get_user_by_emergency_token(token)
+    if not user:
+        return "Invalid or expired emergency link", 404
+    
+    return render_template('emergency_contact.html',
+                        user=user, 
+                        is_emergency_contact=True,
+                        emergency_token=token)
+
 
 @app.route('/emergency')
 def emergency():
     username = request.args.get('username')
-
     user = get_user(username)
     if not user:
         return "User not found", 404
     
-    dexcom_readings = None
-    if user.get('is_diabetic') and user.get('uses_dexcom'):
-        dexcom_username = user.get('dexcom_username')
-        dexcom_password = user.get('dexcom_password')
-        if dexcom_username and dexcom_password:
-            logging.debug(f"Attempting to fetch Dexcom data for user {user['username']}")
-            dexcom_readings, error = get_dexcom_data(dexcom_username, dexcom_password)
-            if error:
-                flash(f'Error fetching Dexcom data: {error}', 'error')
-                logging.error(f"Dexcom data fetch error for user {user['username']}: {error}")
-            elif dexcom_readings:
-                dexcom_readings = dexcom_readings[-12:]
-        else:
-            flash('Dexcom credentials are not set. Please update your profile.', 'warning')
+    # Generate emergency token if it doesn't exist
+    if not user.get('emergency_token'):
+        emergency_token = generate_emergency_token()
+        update_user_emergency_token(user['id'], emergency_token)
+    else:
+        emergency_token = user['emergency_token']
+    
+    show_glucose_section = False
+    glucose_data = None
+    
+    if user.get('is_diabetic'):
+        show_glucose_section = True
+        if user.get('uses_dexcom'):
+            dexcom_username = user.get('dexcom_username')
+            dexcom_password = user.get('dexcom_password')
+            if dexcom_username and dexcom_password:
+                logging.debug(f"Attempting to fetch Dexcom data for user {user['username']}")
+                dexcom_readings, error = get_dexcom_data(dexcom_username, dexcom_password)
+                if error:
+                    flash(f'Error fetching Dexcom data: {error}', 'error')
+                    logging.error(f"Dexcom data fetch error for user {user['username']}: {error}")
+                elif dexcom_readings:
+                    glucose_data = dexcom_readings[-12:]
+            else:
+                flash('Dexcom credentials are not set. Please update your profile.', 'warning')
 
-    return render_template('emergency.html', user=user, dexcom_readings=dexcom_readings)
+    return render_template('emergency.html', 
+                            user=user, 
+                            show_glucose_section=show_glucose_section,
+                            glucose_data=glucose_data,
+                            is_emergency_contact=False,
+                            emergency_token=user['emergency_token'])
+
 
 
 @app.route('/get_emergency_info', methods=['POST'])
 def get_emergency_info():
     try:
         data = request.json
+        token = data.get('token')
         username = data.get('username')
         lat = data.get('latitude')
         lon = data.get('longitude')
+        is_update = data.get('is_update', False)
+        is_emergency_contact = token and not username
 
-        if not all([username, lat, lon]):
-            return jsonify({"status": "error", "message": "Missing required information"}), 400
-
-        user = get_user(username)
+        user = get_user_by_emergency_token(token) if is_emergency_contact else get_user(username)
         if not user:
-            return jsonify({"status": "error", "message": "Invalid username"}), 404
+            return jsonify({"status": "error", "message": "Invalid user or token"}), 404
+
+        emergency_message = user.get('emergency_message') or EMERGENCY_MESSAGE
+
+        # If lat and lon are not provided in the request, get the last known location from the user data
+        if lat is None or lon is None:
+            lat = user.get('last_latitude')
+            lon = user.get('last_longitude')
+            logging.info(f"Using last known location for {username}: lat={lat}, lon={lon}")
+
 
         country_code = get_country_code(lat, lon)
         if not country_code:
             country_code = 'CH'  # Default to Switzerland if detection fails
         
         target_languages = COUNTRY_LANGUAGES.get(country_code, ['en'])
-        translations = translate_message(user['emergency_message'] or EMERGENCY_MESSAGE, target_languages)
+        if 'en' not in target_languages:
+            target_languages.append('en')  # Always include English
+
+        most_spoken_language = target_languages[0]
+
+        emergency_message = user.get('emergency_message') or EMERGENCY_MESSAGE
+        translations = translate_message(emergency_message, target_languages)
+        
+        if not translations:
+            logging.error(f"Failed to get translations for languages: {target_languages}")
+            return jsonify({"status": "error", "message": "Failed to get translations"}), 500
+
+        translations_with_info = {}
+        for lang, translation in translations.items():
+            lang_info = LANGUAGE_INFO.get(lang, {'name': lang, 'flag': '🏳️'})
+            translations_with_info[lang] = {
+                'translation': translation,
+                'name': lang_info['name'],
+                'flag': lang_info['flag']
+            }
         
         # Get Dexcom data if user is diabetic and uses Dexcom
         glucose_readings = None
@@ -467,18 +615,35 @@ def get_emergency_info():
                 logging.error(f"Error fetching Dexcom data: {error}")
             else:
                 logging.info(f"Successfully fetched Dexcom data: {glucose_readings}")
-        
+
         # Send alert
-        alert_sent = send_alert(user, lat, lon, glucose_readings)
+        alert_sent = send_alert(user, lat, lon, is_update, glucose_readings)
+
+        # Send SMS if user has opted for it
+        sms_sent = False
+        if user.get('enable_sms_alerts'):
+            logging.info(f"SMS alerts enabled for user: {user['username']}")
+            sms_sent = send_emergency_sms(user, lat, lon)
+            if sms_sent:
+                logging.info("SMS sent successfully")
+            else:
+                logging.error("Failed to send SMS")
+        else:
+            logging.info(f"SMS alerts not enabled for user: {user['username']}")
         
         response_data = {
             "status": "success", 
-            "translations": translations,
             "country_code": country_code,
             "latitude": lat,
             "longitude": lon,
+            "translations": translations_with_info,
+            "most_spoken_language": most_spoken_language,
+            "is_diabetic": user['is_diabetic'],
+            "uses_dexcom": user['uses_dexcom'],
             "glucose_readings": glucose_readings,
-            "alert_sent": alert_sent
+            "alert_sent": alert_sent,
+            "status_message": " ☑️ Emergency information loaded successfully.",
+            "alert_status": " ☑️ Alert sent successfully to emergency contacts." if alert_sent else "Failed to send alert to emergency contacts."
         }
         
         logging.info(f"Sending emergency info response: {response_data}")
@@ -487,10 +652,94 @@ def get_emergency_info():
     except Exception as e:
         logging.error(f"Error in get_emergency_info: {str(e)}")
         return jsonify({"status": "error", "message": str(e)}), 500
+    
+@app.route('/update_location', methods=['POST'])
+def update_location():
+    data = request.json
+    username = data['username']
+    latitude = data['latitude']
+    longitude = data['longitude']
+    # send_alert = data.get('send_alert', False)
+    send_update = data.get('send_update', False)
+
+    if not username or latitude is None or longitude is None:
+        return jsonify({"status": "error", "message": "Missing required data"}), 400
+
+    user = get_user(username)
+    if not user:
+        return jsonify({"status": "error", "message": "Invalid user or token"}), 404
+
+    if send_update:
+        glucose_readings = None
+        if user.get('is_diabetic') and user.get('uses_dexcom'):
+            glucose_readings, error = get_dexcom_data(user.get('dexcom_username'), user.get('dexcom_password'))
+            if error:
+                logging.error(f"Error fetching Dexcom data for user {user['username']}: {error}")
+
+        alert_sent = send_alert(user, latitude, longitude, is_update=True, glucose_readings=glucose_readings)
+
+        if alert_sent:
+            return jsonify({"status": "success", "message": "Location updated and alert sent"})
+        else:
+            return jsonify({"status": "error", "message": "Failed to send alert"}), 500
+    else:
+        # Only update the location without sending an alert
+        return jsonify({"status": "success", "message": "Location updated"})
+    
+
+def send_emergency_sms(user, latitude, longitude):
+    emergency_contact_phone = user.get('emergency_contact_phone')
+    if not emergency_contact_phone:
+        logging.error(f"Emergency contact phone not found for user: {user['username']}")
+        return False
+
+    alert_message = user.get('alert_message', "Emergency alert!")
+    maps_link = f"https://www.google.com/maps?q={latitude},{longitude}"
+
+    # Construct the message, ensuring it doesn't exceed 160 characters
+    message_body = f"{alert_message} Location: {maps_link}"
+    if len(message_body) > 160:
+        # If too long, truncate the alert message
+        max_alert_length = 160 - len(f" Location: {maps_link}") - 3  # 3 for "..."
+        alert_message = alert_message[:max_alert_length] + "..."
+        message_body = f"{alert_message} Location: {maps_link}"
+
+    logging.info(f"SMS message body (length {len(message_body)}): {message_body}")
+
+    payload = {
+        "messages": [
+            {
+                "from": INFOBIP_SENDER,
+                "destinations": [{"to": emergency_contact_phone}],
+                "text": message_body
+            }
+        ]
+    }
+
+    headers = {
+        "Authorization": f"App {INFOBIP_API_KEY}",
+        "Content-Type": "application/json",
+        "Accept": "application/json"
+    }
+
+    try:
+        response = requests.post(f"{INFOBIP_BASE_URL}/sms/2/text/advanced", json=payload, headers=headers)
+        response.raise_for_status()
+        logging.info(f"SMS sent successfully to {emergency_contact_phone} for user {user['username']}")
+        return True
+    except requests.exceptions.RequestException as e:
+        logging.error(f"Error sending SMS: {str(e)}")
+        if hasattr(e, 'response') and e.response is not None:
+            logging.error(f"Infobip API error response: {e.response.text}")
+        return False
 
 
 @app.route('/register', methods=['GET', 'POST'])
 def register():
+    dyslexia_friendly = session.get('dyslexia_friendly', False)
+    lang = request.args.get('lang', 'en')
+    if lang not in translations:
+        lang = 'en'
     if request.method == 'POST':
         username = request.form['username']
         password = request.form['password']
@@ -515,11 +764,12 @@ def register():
         except psycopg2.Error as e:
             flash(f'Registration failed: {str(e)}', 'error')
 
-    return render_template('register.html')
+    return render_template('register.html', lang=lang, t=translations[lang], dyslexia_friendly=dyslexia_friendly  )
     
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
+    dyslexia_friendly = session.get('dyslexia_friendly', False)
     lang = request.args.get('lang', 'en')
     if lang not in translations:
         lang = 'en'
@@ -553,8 +803,7 @@ def login():
             cur.close()
             conn.close()
     
-    return render_template('login.html', t=translations[lang], lang=lang)
-
+    return render_template('login.html', t=translations[lang], lang=lang, dyslexia_friendly=dyslexia_friendly)
 
 
 @app.route('/logout')
@@ -563,9 +812,27 @@ def logout():
     flash('You have been logged out. See you soon! ☺️', 'success')
     return redirect(url_for('index'))
 
+def format_phone_numbers(phone_numbers):
+    # Split the input by commas, strip whitespace, and filter out empty strings
+    numbers = [num.strip() for num in phone_numbers.split(',') if num.strip()]
+    
+    # Ensure each number is in the correct format
+    formatted_numbers = []
+    for num in numbers:
+        # Remove any non-digit characters except '+'
+        num = ''.join(char for char in num if char.isdigit() or char == '+')
+        # Ensure it starts with '+' if it doesn't already
+        if not num.startswith('+'):
+            num = '+' + num
+        formatted_numbers.append(num)
+    
+    # Join the formatted numbers with commas
+    return ','.join(formatted_numbers)
+
 
 @app.route('/dashboard', methods=['GET', 'POST'])
 def dashboard():
+    dyslexia_friendly = session.get('dyslexia_friendly', False)
     user = get_user_by_id(session['user_id'])
     if user is None:
         session.pop('user_id', None)
@@ -599,11 +866,14 @@ def dashboard():
         # Handle form submission
         emergency_message = request.form.get('emergency_message', '')
         emergency_contacts = ','.join(filter(None, [contact.strip() for contact in request.form.getlist('emergency_contacts')]))
+        emergency_contact_phone = request.form.get('emergency_contact_phone', '').strip()
         alert_message = request.form.get('alert_message', '')
         is_diabetic = 'is_diabetic' in request.form
         uses_dexcom = 'uses_dexcom' in request.form
         dexcom_username = request.form.get('dexcom_username', '')
         dexcom_password = request.form.get('dexcom_password', '')
+        enable_sms_alerts = 'enable_sms_alerts' in request.form
+
         
         # Debug logging for form submission
         logging.debug(f"Form data - is_diabetic: {is_diabetic}, uses_dexcom: {uses_dexcom}")
@@ -611,7 +881,7 @@ def dashboard():
         logging.debug(f"Dexcom password provided: {'Yes' if dexcom_password else 'No'}")
         
         try:
-            update_user(user['id'], emergency_message, emergency_contacts, alert_message, is_diabetic, uses_dexcom, dexcom_username, dexcom_password)
+            update_user(user['id'], emergency_message, emergency_contacts, emergency_contact_phone, alert_message, is_diabetic, uses_dexcom, dexcom_username, dexcom_password, enable_sms_alerts)
             flash('Your information has been updated successfully!', 'success')
         except Exception as e:
             flash(f'An error occurred while updating your information: {str(e)}', 'error')
@@ -633,10 +903,138 @@ def get_location():
     return jsonify({'latitude': latitude, 'longitude': longitude})
 
 
-def send_alert(user, lat, lon, glucose_readings=None):
+def get_or_create_emergency_token(user_id):
+    conn, cur = get_db_connection()
+    try:
+        # First, try to retrieve an existing token
+        cur.execute("SELECT emergency_token FROM users WHERE id = %s", (user_id,))
+        result = cur.fetchone()
+        
+        if result and result['emergency_token']:
+            return result['emergency_token']
+        
+        # If no token exists, create a new one
+        new_token = str(uuid.uuid4())
+        
+        cur.execute("UPDATE users SET emergency_token = %s WHERE id = %s", (new_token, user_id))
+        conn.commit()
+        return new_token
+    finally:
+        cur.close()
+        conn.close()
+
+
+@socketio.on('connect')
+def handle_connect():
+    logging.info(f"New client connected: {request.sid}")
+    emit('status', {'msg': 'Connected to the server.'})
+
+
+@socketio.on('join')
+def on_join(data):
+    try:
+        username = data.get('username')
+        room = data.get('room')
+        if not username or not room:
+            raise ValueError("Username and room are required")
+
+        join_room(room)
+        session['username'] = username
+        session['room'] = room
+        logging.info(f"User {username} joined room {room}")
+        emit('status', {'msg': f'{username} has entered the emergency chat.'}, room=room)
+    except Exception as e:
+        logging.error(f"Error in on_join: {str(e)}")
+        emit('error', {'message': 'Failed to join the room. Please try again.'})
+
+
+@socketio.on('message')
+def handle_message(data):
+    try:
+        room = data.get('room')
+        username = data.get('username')
+        msg = data.get('msg')
+        is_emergency_contact = data.get('is_emergency_contact', False)
+
+        if not all([room, username, msg]):
+            raise ValueError("Room, username, and message are required")
+
+        display_name = "Emergency Contact" if is_emergency_contact else username
+        logging.info(f"Message in room {room} from {display_name}: {msg[:50]}...")
+        emit('message', {'username': display_name, 'msg': msg}, room=room, include_self=False)
+    except Exception as e:
+        logging.error(f"Error in handle_message: {str(e)}")
+        emit('error', {'message': 'Failed to send message. Please try again.'})
+
+
+@socketio.on('leave')
+def on_leave(data):
+    try:
+        username = data.get('username')
+        room = data.get('room')
+        if not username or not room:
+            raise ValueError("Username and room are required")
+
+        leave_room(room)
+        session.pop('username', None)
+        session.pop('room', None)
+        logging.info(f"User {username} left room {room}")
+        emit('status', {'msg': f'{username} has left the emergency chat.'}, room=room)
+    except Exception as e:
+        logging.error(f"Error in on_leave: {str(e)}")
+        emit('error', {'message': 'Failed to leave the room. Please try again.'})
+
+
+@socketio.on('typing')
+def on_typing(data):
+    try:
+        room = data.get('room')
+        username = data.get('username')
+        is_typing = data.get('typing')
+        if not all([room, username, is_typing is not None]):
+            raise ValueError("Room, username, and typing status are required")
+
+        emit('typing', {'username': username, 'typing': is_typing}, room=room, include_self=False)
+    except Exception as e:
+        logging.error(f"Error in on_typing: {str(e)}")
+
+
+@socketio.on('disconnect')
+def on_disconnect():
+    username = session.get('username')
+    room = session.get('room')
+    if username and room:
+        logging.info(f"User {username} disconnected from room {room}")
+        emit('status', {'msg': f'{username} has disconnected.'}, room=room)
+        leave_room(room)
+    session.clear()
+
+
+@socketio.on_error()
+def error_handler(e):
+    logging.error(f"SocketIO error: {str(e)}")
+    emit('error', {'message': 'An unexpected error occurred. Please try again.'})
+
+
+# generates the token necessary for the chat link
+def generate_emergency_token():
+    return str(uuid.uuid4())
+
+def get_user_by_emergency_token(token):
+    conn, cur = get_db_connection()
+    try:
+        cur.execute("SELECT * FROM users WHERE emergency_token = %s", (token,))
+        user = cur.fetchone()
+        return user
+    finally:
+        cur.close()
+        conn.close()
+
+
+def send_alert(user, lat, lon, is_update=False, glucose_readings=None):
     try:
         maps_link = get_google_maps_link(lat, lon)
-        alert_message = f"Emergency Alert: {user['username']} needs help.\n"
+        alert_message = f"{'UPDATED ' if is_update else ''}Emergency Alert: {user['username']} needs help.\n"
         if user['is_diabetic']:
             alert_message += "Type 1 Diabetes.\n"
         alert_message += f"Location: {lat}, {lon}\n"
@@ -646,8 +1044,19 @@ def send_alert(user, lat, lon, glucose_readings=None):
             latest_reading = glucose_readings[0]
             alert_message += f"\nLatest glucose reading: {latest_reading['value']} mg/dL at {latest_reading['time']}\n"
         
-        if user['alert_message']:
+        if not is_update and user['alert_message']:
             alert_message += f"\nCustom message: {user['alert_message']}"
+
+
+        # Get or create the emergency token for this user
+        emergency_token = get_or_create_emergency_token(user['id'])
+
+        # Create the emergency access link
+        emergency_link = url_for('emergency_contact', token=emergency_token, _external=True)
+        alert_message += f"\n\nEmergency Contact Access:\n"
+        alert_message += f"To view the ongoing chat and provide assistance, please use this link:\n"
+        alert_message += f"{emergency_link}\n"
+        alert_message += f"This link provides temporary access to the emergency chat. Please keep it confidential.\n"
         
         send_email_alert(alert_message, user['emergency_contacts'])
         
@@ -685,5 +1094,7 @@ app.secret_key = os.getenv('SECRET_KEY', 'your_fallback_secret_key')
 if __name__ == '__main__':
     with app.app_context():
         init_db()
-    app.run(debug=True)
+        app.run(host='0.0.0.0', port=5000, debug=True)
+
+        # socketio.run(app, debug=True, host='0.0.0.0', port=5000)
 

@@ -161,27 +161,48 @@
         
                 <div class="mb-4">
                     <label class="block text-gray-700 text-sm font-bold mb-2" for="emergency_contacts">
-                        Emergency Contacts
+                        Emergency Contacts (Email)
                     </label>
                     <div id="emergency_contacts_container">
                         {% if user.emergency_contacts %}
                             {% for contact in user.emergency_contacts.split(',') %}
                                 <div class="flex mb-2">
-                                    <input type="text" name="emergency_contacts" value="{{ contact }}" class="flex-grow shadow appearance-none border rounded py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline">
-                                    <button type="button" class="remove-contact ml-2 bg-red-500 hover:bg-red-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline">Remove</button>
+                                    <input type="email" name="emergency_contacts" class="flex-grow shadow appearance-none border rounded py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" 
+                                           value="{{ contact }}">
+                                    <button type="button" class="remove-contact ml-2 bg-red-500 hover:bg-red-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline">X</button>
                                 </div>
                             {% endfor %}
+                        {% else %}
+                            <div class="flex mb-2">
+                                <input type="email" name="emergency_contacts" class="flex-grow shadow appearance-none border rounded py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" 
+                                       value="">
+                                <button type="button" class="remove-contact ml-2 bg-red-500 hover:bg-red-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline" style="display: none;">X</button>
+                            </div>
                         {% endif %}
-                        <div class="flex mb-2">
-                            <input type="text" name="emergency_contacts" class="flex-grow shadow appearance-none border rounded py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline">
-                            <button type="button" class="remove-contact ml-2 bg-red-500 hover:bg-red-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline">Remove</button>
-                        </div>
                     </div>
-                    <button type="button" id="add_contact" class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline mt-2">
-                        Add Another Contact
+                    <button type="button" id="add_contact" class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline">
+                        +
                     </button>
                 </div>
                 
+                
+                <div class="mb-4">
+                    <label class="block text-gray-700 text-sm font-bold mb-2" for="emergency_contact_phone">
+                        Emergency Contact Phone Number
+                    </label>
+                    <input type="tel" id="emergency_contact_phone" name="emergency_contact_phone" 
+                           class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                           value="{{ user.emergency_contact_phone or '' }}"
+                           placeholder="+1234567890">
+                    <p class="text-sm text-gray-600 mt-1">Enter phone number in international format (e.g., +1234567890)</p>
+                </div>
+                <div class="mb-4">
+                    <label class="flex items-center">
+                        <input type="checkbox" id="enable_sms_alerts" name="enable_sms_alerts" class="form-checkbox h-5 w-5 text-blue-600" {% if user.enable_sms_alerts %}checked{% endif %}>
+                        <span class="ml-2 text-gray-700">Enable SMS alerts for emergency contacts</span>
+                    </label>
+                </div>
+                <br>
                 <div class="mb-4">
                     <label class="block text-gray-700 text-sm font-bold mb-2" for="is_diabetic">
                         Are you diabetic?
@@ -211,9 +232,6 @@
                         </div>
                     </div>
                 </div>
-
-
-                
         
                 <div class="mb-6">
                     <label class="block text-gray-700 text-sm font-bold mb-2" for="alert_message">
@@ -237,7 +255,7 @@
                 <p class="text-gray-600">{{ user.emergency_message if user.emergency_message else 'Not set' }}</p>
             </div>
             <div class="mb-4">
-                <h3 class="text-xl font-semibold text-gray-700 mb-2">Emergency Contacts:</h3>
+                <h3 class="text-xl font-semibold text-gray-700 mb-2">Emergency Contacts 📮</h3>
                 <ul class="list-disc list-inside text-gray-600">
                     {% if user.emergency_contacts %}
                         {% for contact in user.emergency_contacts.split(',') %}
@@ -248,6 +266,22 @@
                     {% endif %}
                 </ul>
             </div>
+
+            <div class="mb-4">
+                <h3 class="text-xl font-semibold text-gray-700 mb-2">Emergency Contacts ☎️</h3>
+                <ul class="list-disc list-inside text-gray-600">
+                    {% if user.emergency_contact_phone %}
+                        {% for contact in user.emergency_contact_phone.split(',') %}
+                            <li>{{ contact }}</li>
+                        {% endfor %}
+                    {% else %}
+                        <li>No contacts set</li>
+                    {% endif %}
+                </ul>
+            </div>
+
+
+            
             <div class="mb-4">
                 <h3 class="text-xl font-semibold text-gray-700 mb-2">Alert Message:</h3>
                 <p class="text-gray-600">{{ user.alert_message if user.alert_message else 'Not set' }}</p>
@@ -271,46 +305,6 @@
             </p>
             <!-- <h3 class="text-xl font-semibold text-gray-700 mb-2">Glucose Readings</h3> -->
             <div id="glucose-readings-content" class="hidden mt-4">
-                <!-- <div class="recent-readings mb-6">
-                    <h4 class="text-lg font-semibold text-gray-700 mb-2">Recent Readings</h4>
-                    {% if dexcom_readings %}
-                        <div class="current-glucose">
-                            Current: 
-                            <span class="
-                                {% if dexcom_readings[0].value <= 80 %}glucose-low
-                                {% elif dexcom_readings[0].value <= 150 %}glucose-normal
-                                {% elif dexcom_readings[0].value <= 180 %}glucose-high
-                                {% else %}glucose-very-high
-                                {% endif %}
-                            ">
-                                {{ dexcom_readings[0].value }} mg/dL
-                            </span>
-                        </div>
-                        <div class="glucose-display">
-                            {% for reading in dexcom_readings|reverse %}
-                                <span class="glucose-value 
-                                    {% if reading.value <= 80 %}glucose-low
-                                    {% elif reading.value <= 150 %}glucose-normal
-                                    {% elif reading.value <= 180 %}glucose-high
-                                    {% else %}glucose-very-high
-                                    {% endif %}
-                                " data-value="{{ reading.value }}">
-                                    {{ reading.value }}
-                                </span>
-                            {% endfor %}
-                        </div>
-                        
-                        <div class="glucose-legend mt-2 flex flex-wrap justify-start text-sm">
-                            <span class="mr-4 mb-1"><span class="inline-block w-3 h-3 bg-red-600 mr-1"></span> Low (≤80)</span>
-                            <span class="mr-4 mb-1"><span class="inline-block w-3 h-3 bg-green-600 mr-1"></span> Normal (81-150)</span>
-                            <span class="mr-4 mb-1"><span class="inline-block w-3 h-3 bg-yellow-600 mr-1"></span> High (151-180)</span>
-                            <span class="mb-1"><span class="inline-block w-3 h-3 bg-red-600 mr-1"></span> Very High (>180)</span>
-                        </div>
-                    {% else %}
-                        <p class="text-gray-600">No recent readings available.</p>
-                    {% endif %}
-                </div> -->
-        
                 <div class="detailed-readings">
                     <h4 class="text-lg font-semibold text-gray-700 mb-2">Detailed Readings</h4>
                     {% if dexcom_readings %}
@@ -359,15 +353,6 @@
         </div>
     </div>
 
-        <!-- <footer class="bg-white">
-            <div class="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
-                <p class="text-center text-sm text-gray-500">
-                    Made with <span class="text-blue-500 pulse-animation inline-block">♥</span> by IreAV
-                    <br>© <span id="current-year"></span>
-                </p>
-            </div>
-        </footer> -->
-
         <footer class="bg-white">
             <div class="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8 relative z-0">
                 <p class="text-center text-sm text-gray-500">
@@ -380,39 +365,63 @@
     
 
     <script>
-        function copyLink() {
-            var copyText = document.getElementById("emergency-link");
-            copyText.select();
-            copyText.setSelectionRange(0, 99999);
-            document.execCommand("copy");
-            alert("Emergency link copied to clipboard!");
+    function copyLink() {
+        var copyText = document.getElementById("emergency-link");
+        copyText.select();
+        copyText.setSelectionRange(0, 99999);
+        document.execCommand("copy");
+        alert("Emergency link copied to clipboard!");
+    }
+
+    document.addEventListener('DOMContentLoaded', function() {
+        const addContactButton = document.getElementById('add_contact');
+        const contactsContainer = document.getElementById('emergency_contacts_container');
+
+        function addContactInput() {
+            const newInput = document.createElement('div');
+            newInput.className = 'flex mb-2';
+            newInput.innerHTML = `
+                <input type="email" name="emergency_contacts" 
+                    class="flex-grow shadow appearance-none border rounded py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline">
+                <button type="button" class="remove-contact ml-2 bg-red-500 hover:bg-red-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline">X</button>
+            `;
+            contactsContainer.appendChild(newInput);
+            updateRemoveButtons();
         }
-    
-        document.getElementById('add_contact').addEventListener('click', function() {
-            var container = document.getElementById('emergency_contacts_container');
-            var contactDiv = document.createElement('div');
-            contactDiv.className = 'flex mb-2';
-            
-            var newInput = document.createElement('input');
-            newInput.type = 'text';
-            newInput.name = 'emergency_contacts';
-            newInput.className = 'flex-grow shadow appearance-none border rounded py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline';
-            
-            var removeButton = document.createElement('button');
-            removeButton.type = 'button';
-            removeButton.className = 'remove-contact ml-2 bg-red-500 hover:bg-red-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline';
-            removeButton.textContent = 'Remove';
-            
-            contactDiv.appendChild(newInput);
-            contactDiv.appendChild(removeButton);
-            container.appendChild(contactDiv);
-        });
-    
-        document.getElementById('emergency_contacts_container').addEventListener('click', function(e) {
-            if (e.target.classList.contains('remove-contact')) {
-                e.target.parentElement.remove();
+
+    function updateRemoveButtons() {
+        const removeButtons = contactsContainer.querySelectorAll('.remove-contact');
+        removeButtons.forEach((button, index) => {
+            if (index === 0 && removeButtons.length === 1) {
+                button.style.display = 'none';
+            } else {
+                button.style.display = 'inline-block';
             }
         });
+    }
+
+    addContactButton.addEventListener('click', addContactInput);
+
+    contactsContainer.addEventListener('click', function(e) {
+        if (e.target.classList.contains('remove-contact')) {
+            const inputDiv = e.target.closest('.flex');
+            if (contactsContainer.children.length > 1) {
+                inputDiv.remove();
+                updateRemoveButtons();
+            } else {
+                inputDiv.querySelector('input').value = '';
+            }
+        }
+    });
+
+    // document.getElementById('emergency_contacts_container').addEventListener('click', (e) => handleRemove(e, '#emergency_contacts_container'));
+    // document.getElementById('emergency_contact_phone_container').addEventListener('click', (e) => handleRemove(e, '#emergency_contact_phone_container'));
+
+    // Initialize remove buttons
+    updateRemoveButtons();
+});
+
+
     
         document.getElementById('editButton').addEventListener('click', function() {
             document.getElementById('editSection').style.display = 'block';
@@ -437,55 +446,52 @@
                 }, 5000);
             });
         
-            
-            document.addEventListener('DOMContentLoaded', function() {
-                const glucoseValues = document.querySelectorAll('.glucose-value');
-                const maxGlucose = 300; // Adjust this value as needed
+        document.addEventListener('DOMContentLoaded', function() {
+            const glucoseValues = document.querySelectorAll('.glucose-value');
+            const maxGlucose = 300; // Adjust this value as needed
 
-                glucoseValues.forEach(value => {
-                    const glucoseValue = parseInt(value.dataset.value);
-                    const heightPercentage = (glucoseValue / maxGlucose) * 100;
-                    const height = `calc(${heightPercentage}% * (var(--max-height) - var(--min-height)) + var(--min-height))`;
-                    const fontSize = `calc(var(--base-size) + ${glucoseValue / maxGlucose} * var(--base-size))`;
+            glucoseValues.forEach(value => {
+                const glucoseValue = parseInt(value.dataset.value);
+                const heightPercentage = (glucoseValue / maxGlucose) * 100;
+                const height = `calc(${heightPercentage}% * (var(--max-height) - var(--min-height)) + var(--min-height))`;
+                const fontSize = `calc(var(--base-size) + ${glucoseValue / maxGlucose} * var(--base-size))`;
 
-                    value.style.height = height;
-                    value.style.fontSize = fontSize;
-                });
-            });
-    
-    
-            // Toggle diabetic details visibility
-            const isDiabeticCheckbox = document.getElementById('is_diabetic');
-            const diabeticDetails = document.getElementById('diabetic-details');
-            // Toggle Dexcom credentials visibility
-            const usesDexcomCheckbox = document.getElementById('uses_dexcom');
-            const dexcomCredentials = document.getElementById('dexcom-credentials');
-            
-            isDiabeticCheckbox.addEventListener('change', function() {
-                diabeticDetails.style.display = this.checked ? 'block' : 'none';
-                if (!this.checked) {
-                    document.getElementById('uses_dexcom').checked = false;
-                    document.getElementById('dexcom-credentials').style.display = 'none';
-                }
-            });
-            
-            usesDexcomCheckbox.addEventListener('change', function() {
-                dexcomCredentials.style.display = this.checked ? 'block' : 'none';
-            });
-
-            const toggleLink = document.getElementById('toggle-glucose-readings');
-            const readingsContent = document.getElementById('glucose-readings-content');
-
-            toggleLink.addEventListener('click', function() {
-                readingsContent.classList.toggle('hidden');
-                this.textContent = readingsContent.classList.contains('hidden') 
-                    ? 'Check my Dexcom connection and readings'
-                    : 'Hide Dexcom readings';
+                value.style.height = height;
+                value.style.fontSize = fontSize;
             });
         });
 
-        document.getElementById('current-year').textContent = new Date().getFullYear();
 
+        // Toggle diabetic details visibility
+        const isDiabeticCheckbox = document.getElementById('is_diabetic');
+        const diabeticDetails = document.getElementById('diabetic-details');
+        // Toggle Dexcom credentials visibility
+        const usesDexcomCheckbox = document.getElementById('uses_dexcom');
+        const dexcomCredentials = document.getElementById('dexcom-credentials');
+        
+        isDiabeticCheckbox.addEventListener('change', function() {
+            diabeticDetails.style.display = this.checked ? 'block' : 'none';
+            if (!this.checked) {
+                document.getElementById('uses_dexcom').checked = false;
+                document.getElementById('dexcom-credentials').style.display = 'none';
+            }
+        });
+        
+        usesDexcomCheckbox.addEventListener('change', function() {
+            dexcomCredentials.style.display = this.checked ? 'block' : 'none';
+        });
+
+        const toggleLink = document.getElementById('toggle-glucose-readings');
+        const readingsContent = document.getElementById('glucose-readings-content');
+
+        toggleLink.addEventListener('click', function() {
+            readingsContent.classList.toggle('hidden');
+            this.textContent = readingsContent.classList.contains('hidden') 
+                ? 'Check my Dexcom connection and readings'
+                : 'Hide Dexcom readings';
+            });
+        });
+        // document.getElementById('current-year').textContent = new Date().getFullYear();
 
     </script>
 </body>

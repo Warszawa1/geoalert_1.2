@@ -1,4 +1,4 @@
-body { 
+/* body { 
     font-family: Arial, sans-serif; 
     text-align: center; 
     padding: 20px; 
@@ -12,24 +12,24 @@ body {
 #error { 
     margin-top: 20px; 
     color: red; 
-}
+} */
 
 /* Default styles for larger screens (like laptops) */
-#map {
+/* #map {
     height: 150px;
     width: 50%;
     margin-top: 20px;
-}
+} */
 
 /* Styles for smaller screens (like phones) */
-@media (max-width: 768px) {
+/* @media (max-width: 768px) {
     #map {
         width: 100%;
     }
-}
+} */
 
 
-#emergency-message { 
+/* #emergency-message { 
     margin-top: 20px; 
     text-align: left; 
 }
@@ -44,9 +44,9 @@ body {
 #alert-status { 
     margin-top: 20px; 
     font-style: italic; 
-}
+} */
         
-        /* Loading spinner styles */
+/* Loading spinner styles */
 .loader {
     border: 8px solid #f3f3f3; /* Slightly thicker border */
     border-top: 8px solid #3498db; /* Thicker top border for better visibility */
@@ -94,26 +94,26 @@ body {
     }
 }
 
-#loading-message {
+/* #loading-message {
     font-size: 18px;
     margin-top: 10px;
-}
+} */
 
-.login-form {
+/* .login-form {
     max-width: 400px;
     margin: 0 auto;
-  }
-  
-  input {
+  } */
+
+/* input {
     width: 100%;
     padding: 10px;
     margin-bottom: 15px;
-  }
-  
-  .password-input {
+} */
+
+/* .password-input {
     position: relative;
-  }
-  
+  } */
+
 .toggle-password {
     position: absolute;
     right: 10px;
@@ -122,23 +122,60 @@ body {
     background: none;
     border: none;
     cursor: pointer;
-  }
-  
-  .login-button {
+}
+
+/* .login-button {
     width: 100%;
     padding: 10px;
     background-color: #00a76f;
     color: white;
     border: none;
     cursor: pointer;
-  }
+} */
 
 
-  body { font-family: Arial, sans-serif; margin: 20px; }
-  #current-glucose { font-size: 48px; font-weight: bold; text-align: center; margin: 20px 0; }
-  #chart-container { width: 80%; margin: auto; }
-  .flash-message { padding: 10px; margin-bottom: 10px; border-radius: 5px; }
-  .flash-error { background-color: #ffcccc; color: #cc0000; }
-  .flash-warning { background-color: #fff3cd; color: #856404; }
+/* body { font-family: Arial, sans-serif; margin: 20px; }
+#current-glucose { font-size: 48px; font-weight: bold; text-align: center; margin: 20px 0; }
+#chart-container { width: 80%; margin: auto; }
+.flash-message { padding: 10px; margin-bottom: 10px; border-radius: 5px; }
+.flash-error { background-color: #ffcccc; color: #cc0000; }
+.flash-warning { background-color: #fff3cd; color: #856404; } */
 
 
+@import url('https://fonts.googleapis.com/css2?family=Caveat&display=swap');
+        
+.handwritten-link {
+    font-family: 'Caveat', cursive;
+    font-size: 1.3rem;
+    color: #555;
+    text-decoration: none;
+    border-bottom: 1px solid transparent;
+    transition: border-color 0.3s ease;
+    padding: 2px 4px;
+    position: relative;
+}
+
+.handwritten-link::after {
+    content: '';
+    position: absolute;
+    width: 100%;
+    height: 1px;
+    bottom: -1px;
+    left: 5px;
+    background-color: #555;
+    transform: scaleX(0);
+    transform-origin: bottom right;
+    transition: transform 0.3s ease;
+}
+
+.handwritten-link:hover::after {
+    transform: scaleX(1);
+    transform-origin: bottom left;
+}
+.pulse-animation {
+    animation: pulse 3s infinite;
+}
+@keyframes pulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.24); }
+        }

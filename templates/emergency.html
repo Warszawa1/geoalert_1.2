@@ -1,374 +1,404 @@
 <!DOCTYPE html>
-<html lang="en" class="h-full bg-gray-100">
+<html lang="en" class="h-full bg-white-100">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Emergency Alert</title>
-    <!-- <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}"> -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
     <link rel="icon" type="image/png" href="/static/favicon.png">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css" rel="stylesheet">
     <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
-<style>
-    .loader {
-    border: 8px solid #f3f3f3; /* Slightly thicker border */
-    border-top: 8px solid #3498db; /* Thicker top border for better visibility */
-    border-radius: 50%;
-    width: 120px; /* Larger width */
-    height: 120px; /* Larger height */
-    animation: spin 1s linear infinite;
-    margin: 20px auto;
-    box-shadow: 0 0 15px rgba(52, 152, 219, 0.5); /* Add a subtle shadow */
-}
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <style>
+        .system-message { color: #888; font-style: italic; font-size: 0.92rem; margin-bottom: 4px; }
+        .chat-container { height: calc(100vh - 200px); }
+        .message { max-width: 80%; margin-bottom: 10px; clear: both; }
+        .user-message { float: right; }
+        .contact-message { float: left; }
+        .message-bubble {
+            padding: 10px 15px;
+            border-radius: 20px;
+            display: inline-block;
+            word-wrap: break-word;
+        }
+        .user-message .message-bubble {
+            background-color: #DCF8C6;
+            border-bottom-right-radius: 0;
+        }
+        .contact-message .message-bubble {
+            background-color: #E6E6E6;
+            border-bottom-left-radius: 0;
+        }
+        .system-message {
+            text-align: center;
+            color: #888;
+            font-style: italic;
+            margin: 10px 0;
+            font-size: 0.9em;
+        }
+        .pulse-animation {
+            animation: pulse 3s infinite;
+        }
 
-/* Keyframes for spin animation */
-@keyframes spin {
-    0% { transform: rotate(0deg); }
-    100% { transform: rotate(360deg); }
-}
+        .tab { overflow: hidden; background-color: white; text-align: right; }
+        .tab button {
+            background-color: inherit;
+            border: none;
+            border-radius: 5px;
+            outline: none;
+            cursor: pointer;
+            padding: 14px 16px;
+            transition: 0.3s;
+        }
+        .tab button:hover { background-color: white; }
+        .tab button.active { background-color: whitesmoke; font-weight: 500; }
+        .tabcontent {
+            display: none;
+            padding: 12px 18px;
+            background-color: whitesmoke;
+            border-radius: 5px;
+        }
+        #location-info {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
 
-/* Responsive styles */
-@media (max-width: 768px) {
-    .loader {
-        width: 80px; /* Smaller width for smaller screens */
-        height: 80px; /* Smaller height for smaller screens */
-        border: 6px solid #f3f3f3;
-        border-top: 6px solid #3498db;
-    }
-    #chart-container {
-        margin-top: 10px;
-    }
-}
-
-@media (max-width: 480px) {
-    .loader {
-        width: 60px; /* Even smaller width for very small screens */
-        height: 60px; /* Even smaller height for very small screens */
-        border: 4px solid #f3f3f3;
-        border-top: 4px solid #60A5FA;
-    }
-}
-
-@keyframes pulse {
-        0%, 100% { transform: scale(1); }
-        50% { transform: scale(1.25); }
-    }
-    .pulse-animation {
-        animation: pulse 2s infinite;
-    }
-
-#loading-message {
-    font-size: 18px;
-    margin-top: 10px;
-}
-
-</style>
+        #confirm-location {
+            min-width: 120px;
+            color: rgb(93, 204, 93) 600
+        }
+    </style>
 </head>
-<body class="h-full">
+<body class="h-full"
+    data-is-emergency-contact="{{ 'true' if is_emergency_contact else 'false' }}"
+    data-username="{{ user.username }}"
+    data-emergency-token="{{ emergency_token }}">
     <div class="min-h-full">
         <main class="max-w-7xl mx-auto pb-10 lg:py-12 lg:px-8">
             <div class="lg:grid lg:grid-cols-12 lg:gap-x-5">
                 <div class="space-y-6 sm:px-6 lg:px-0 lg:col-span-12">
                     <div class="shadow sm:rounded-md sm:overflow-hidden">
-                            <div class="p-4 mb-4">
-                                <div class="flex items-center justify-between">
-                                    <div class="flex items-center">
-                                        <svg class="h-10 w-10 mr-4 pulse-animation" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                            <circle cx="12" cy="12" r="10" stroke="#60A5FA" stroke-width="3" fill="#EFF6FF"/>
-                                            <path d="M12 8V12" stroke="#2563EB" stroke-width="3" stroke-linecap="round"/>
-                                            <circle cx="12" cy="16" r="1.25" fill="#2563EB"/>
-                                        </svg>
-                                        <h1 class="text-xl font-semibold text-gray-800">Emergency Alert System</h1>
-                                    </div>
-                                </div>
-                            </div>
-                            
-
-                            <div id="loading" class="text-center">
-                                <div class="loader border-t-4 border-blue-500 rounded-full border-4 border-gray-200 h-12 w-12 mb-4 mx-auto"></div>
-                                <div id="loading-message" class="text-lg text-gray-600">Loading emergency information...</div>
-                            </div>
-
-                            <div id="emergency-message" class="mt-6">
-                                <!-- Emergency message content will be inserted here -->
-                            </div>
-
-                            <div id="glucose-section" class="bg-white shadow overflow-hidden sm:rounded-lg">
-                                <div class="px-4 py-5 sm:px-6">
-                                    <h2 class="text-lg leading-6 font-medium text-gray-900">Glucose Information</h2>
-                                </div>
-
-                                <div class="border-t border-gray-200 px-4 py-5 sm:p-0">
-                                    <dl class="sm:divide-y sm:divide-gray-200">
-                                        <div class="py-4 sm:py-5 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6">
-                                            <dt class="text-sm font-medium text-gray-500">Current Glucose</dt>
-                                            <dd id="current-glucose" class="mt-1 text-3xl font-semibold text-green-600 sm:mt-0 sm:col-span-2">155 mg/dL</dd>
-                                        </div>
-                                    </dl>
-                                </div>
-                                <div class="px-4 py-5 sm:p-6">
-                                    {% if user.is_diabetic and user.uses_dexcom %}
-                                        {% if dexcom_readings | reverse %}
-                                            <div id="glucose-data" data-readings="{{ dexcom_readings | tojson | forceescape }}"></div>
-                                        {% else %}
-                                            <p>No recent Dexcom readings available.</p>
-                                        {% endif %}
-                                    {% else %}
-                                        <p>Dexcom integration is not enabled for this user.</p>
-                                    {% endif %}
-                                    <canvas id="glucoseChart" class="w-full h-64"></canvas>
-                                </div>
-                            </div>
-
-                            <div id="map" class="h-64 sm:h-96 rounded-lg shadow-inner"></div>
-                            <div id="status" class="mt-4 text-sm text-gray-600"></div>
-                            <div id="alert-status" class="mt-4 text-green-600" style="font-size: 0.9375rem;""></div>
-                            <div id="error" class="mt-4 text-red-500"></div>
-
+                        <div class="p-4 mb-4">
+                            <h1 class="text-xl font-semibold text-gray-800">Emergency Alert System</h1>
                         </div>
+
+                        <div id="emergencyInfo">
+                            <div class="tab"  id="languageTabs"></div>
+                            <div id="translations" style="font-weight: 600;"></div>
+                        </div>
+
+                        <div id="map" class="h-64 sm:h-96 rounded-lg shadow-inner p4 mb-4"></div>
+                        <div id="location-update-disclaimer" class="mt-2 text-sm text-red-600 hidden"></div>
+
+                        <div id="location-info" class="mt-4 p-2 bg-white rounded-lg shadow-sm mb-4">
+                            <p id="location-message" class="mb-2">Is this location correct? If not, drag the pin to adjust.</p>
+                            <button id="confirm-location" class="bg-green-600 text-white px-3 py-2 rounded">Confirm Location</button>
+                        </div>
+
+                        <div class="emergency-chat mt-4 bg-white shadow-sm overflow-hidden">
+                            <div class="emergency-chat-header p-4 bg-blue-500 text-white font-bold">Emergency Chat</div>
+                            <div id="chat-messages" class="h-48 overflow-y-auto p-4"></div>
+                            <div id="typing-indicator" class="text-xs text-gray-500 px-4 py-2"></div>
+                            <div class="emergency-chat-input p-2 border-t">
+                                <input type="text" id="message-input" class="w-full px-2 py-1 border rounded text-sm" placeholder="Type your message...">
+                                <button id="send-button" class="mt-2 bg-blue-500 text-white px-4 py-2 rounded">Send</button>
+                            </div>
+                        </div>
+                    </div>
+                    <div id="glucose-section" class="bg-white shadow overflow-hidden sm:rounded-lg mt-4">
+                        <div class="px-4 py-5 sm:p-6">
+                            <h2 class="text-lg leading-6 font-medium text-gray-900">Glucose Information</h2>
+                            <div id="current-glucose" class="mt-1 text-3xl font-semibold text-green-600"></div>
+                            <div id="glucose-data"></div>
+                            <canvas id="glucoseChart" class="w-full h-64 mt-4"></canvas>
+                        </div>
+                    </div>
+                    <div class="mt-4 p-4 bg-white rounded-lg shadow-sm">
+                        <div id="status" class="text-sm text-gray-600 mb-2"></div>
+                        <div id="alert-status" class="text-sm text-green-600"></div>
                     </div>
                 </div>
             </div>
         </main>
-        
+        <footer class="bg-white">
+            <div class="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8 relative z-0">
+                <p class="text-center text-sm text-gray-500">
+                    Made with care<span class="text-blue-500 pulse-animation inline-block">♥</span>
+                    <br>© 2024 IreAV. All rights reserved.
+                </p>
+            </div>
+        </footer>
     </div>
 
-    
-        <div id="language-flags" class="flex space-x-2"></div>
-    
-        <div id="glucose-info" class="bg-white p-4 rounded-lg shadow hidden">
-            <h2 class="text-xl font-semibold mb-2">Glucose Information</h2>
-            <p id="glucose-reading" class="text-gray-700"></p>
-        </div>
-    
-        <div id="alert-status" class="bg-green-100 border-l-4 border-green-500 text-green-700 p-4 hidden" role="alert">
-            <p class="font-bold">Alert Status</p>
-            <p>Emergency alert has been sent successfully.</p>
-        </div>
-    </div>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const isEmergencyContact = document.body.dataset.isEmergencyContact === 'true';
+    const emergencyToken = document.body.dataset.emergencyToken;
+    const username = document.body.dataset.username;
+    let map, marker, userLat, userLon;
+    const socket = io.connect('http://' + document.domain + ':' + location.port);
 
-    <footer class="bg-white">
-        <div class="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
-            <p class="text-center text-sm text-gray-500">
-                Made with <span class="text-blue-500 pulse-animation inline-block">♥</span> 
-                <br>© 2024 IreAV. All rights reserved.
-            </p>
-        </div>
-    </footer>
+    function initializePage() {
+        getCurrentLocation();
+        initializeChat();
+    }
 
 
-    <script>
-        let map, marker;
-        let userLat, userLon;
-
-        function initMap(lat, lon) {
-            map = L.map('map').setView([lat, lon], 13);
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
-            marker = L.marker([lat, lon]).addTo(map);
-        }
-
-        function getEmergencyInfo(lat, lon) {
-            const urlParams = new URLSearchParams(window.location.search);
-            const username = urlParams.get('username');
-
-            fetch('/get_emergency_info', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ latitude: lat, longitude: lon, username: username }),
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.status === "success") {
-                    document.getElementById('loading').style.display = 'none';
-                    document.getElementById('map').style.display = 'block';
-                    document.getElementById('emergency-message').style.display = 'block';
-                    displayEmergencyMessage(data.translations);
-                    initMap(data.latitude, data.longitude);
-                    document.getElementById('status').textContent = " ☑️ Emergency information loaded.";
-                    document.getElementById('alert-status').textContent = data.alert_sent ? 
-                        " ☑️ Alert sent successfully to emergency contacts." : 
-                        "❗️Failed to send alert to emergency contacts.";
-                    
-
-                    // After displaying emergency info, start loading glucose data
-                    document.getElementById('glucose-section').style.display = 'block';
-                    setTimeout(() => fetchDexcomData(username), 1000); // Delay glucose data fetch by 1 second
-                } else {
-                    throw new Error(data.message || "Unknown error occurred");
-                }
-            })
-            .catch(error => {
-                document.getElementById('loading').style.display = 'none';
-                document.getElementById('status').textContent = "Error loading information.";
-                document.getElementById('error').textContent = "Error details: " + error.message;
-                // console.error('Error:', error);
-            });
-        }
-
-        function displayEmergencyMessage(translations) {
-            const messageDiv = document.getElementById('emergency-message');
-            messageDiv.innerHTML = '<h2 class="text-xl text-center mb-2">    Message:</h2>';
-            for (const [lang, translation] of Object.entries(translations)) {
-                messageDiv.innerHTML += `
-                    <div class="bg-white shadow-md rounded px-4 py-2 mb-2">
-                        <h3 class="font-bold">${getLanguageName(lang)}:</h3>
-                        <p>${translation}</p>
-                    </div>
-                `;
-            }
-        }
-
-        function getLanguageName(langCode) {
-            const languageNames = {
-                'en': 'English', 'es': 'Español', 'nl': 'Nederlands',
-                'fr': 'Français', 'de': 'Deutsch', 'it': 'Italiano', 'pl': 'Polski'
-            };
-            return languageNames[langCode] || langCode.toUpperCase();
-        }
-
-        function getLocationAndProcess() {
-            const urlParams = new URLSearchParams(window.location.search);
-            const username = urlParams.get('username');
-
-            if (!username) {
-                document.getElementById('loading').style.display = 'none';
-                document.getElementById('error').textContent = "No username provided. Please use a valid emergency link.";
-                return;
-            }
-
-            if ("geolocation" in navigator) {
-                navigator.geolocation.getCurrentPosition(function(position) {
+     function getCurrentLocation() {
+        if ("geolocation" in navigator) {
+            navigator.geolocation.getCurrentPosition(
+                position => {
                     userLat = position.coords.latitude;
                     userLon = position.coords.longitude;
                     getEmergencyInfo(userLat, userLon);
-                }, function(error) {
-                    document.getElementById('loading').style.display = 'none';
-                    document.getElementById('status').textContent = "Unable to get location.";
-                    document.getElementById('error').textContent = "Geolocation error: " + error.message;
-                    console.error('Geolocation Error:', error);
-                });
-            } else {
-                document.getElementById('loading').style.display = 'none';
-                document.getElementById('status').textContent = "Geolocation not supported.";
-                document.getElementById('error').textContent = "Please contact emergency services directly.";
-            }
+                },
+                error => {
+                    console.error("Geolocation error:", error);
+                    getEmergencyInfo();
+                }
+            );
+        } else {
+            console.error("Geolocation not supported by this browser.");
+            getEmergencyInfo();
+        }
+    }
+
+    function getEmergencyInfo(lat, lon) {
+        const data = {
+            username: username
+        };
+        if (lat && lon) {
+            data.latitude = lat;
+            data.longitude = lon;
         }
 
-        function getColor(value) {
-            if (value <= 70) return '#F44336'; //complementary to the green
-            if (value <= 180) return 'rgba(5, 150, 105)'; // vibrant green but easy on the eyes
-            return 'orange';
+        fetch('/get_emergency_info', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data),
+        })
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            return response.json();
+        })
+        .then(data => {
+            if (data.status === "success") {
+                displayEmergencyInfo(data);
+                initMap(data.latitude, data.longitude);
+            } else {
+                throw new Error(data.message || "Failed to get emergency info");
+            }
+        })
+        .catch(error => {
+            console.error("Error:", error);
+            // Display a user-friendly error message on the page
+            document.getElementById('status').textContent = "An error occurred while fetching emergency information. Please try again.";
+        });
+    }
+
+    function initMap(lat, lon) {
+        if (!map) {
+            map = L.map('map').setView([lat, lon], 13);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+            marker = L.marker([lat, lon], {draggable: true}).addTo(map);
+
+            marker.on('dragend', function(event) {
+                let newPosition = event.target.getLatLng();
+                userLat = newPosition.lat;
+                userLon = newPosition.lng;
+                document.getElementById('confirm-location').style.display = 'block';
+                document.getElementById('location-message').textContent = 'New location selected. Click "Confirm Location" to update.';
+
+                // sendLocationUpdate(userLat, userLon);
+            });
+
+            document.getElementById('confirm-location').addEventListener('click', function() {
+                this.style.display = 'none';
+                document.getElementById('location-message').textContent = '☑️ Location confirmed.';
+                updateLocation(userLat, userLon);
+            });
+        } else {
+            map.setView([lat, lon], 13);
+            marker.setLatLng([lat, lon]);
+        }
+    }
+
+    function displayEmergencyInfo(data) {
+        document.getElementById('status').textContent = data.status_message || '';
+        document.getElementById('alert-status').textContent = data.alert_status || '';
+        displayTranslations(data.translations);
+        if (data.glucose_readings) {
+            updateGlucoseChart(data.glucose_readings);
+        }
+    }
+
+    function updateLocation(lat, lon) {
+        console.log(`Attempting to update location: lat=${lat}, lon=${lon}`);
+        fetch('/update_location', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                username: username,
+                token: emergencyToken,
+                latitude: lat,
+                longitude: lon,
+                send_update: true
+            }),
+        })
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            return response.json();
+        })
+        .then(data => {
+            if (data.status === "success") {
+                console.log("Location updated and alert sent successfully");
+                document.getElementById('location-message').textContent = 'Location confirmed and updated alert sent.';
+            } else {
+                throw new Error(data.message || "Failed to update location");
+            }
+        })
+        .catch(error => {
+            console.error("Error:", error);
+            document.getElementById('location-message').textContent = 'Failed to update location. Please try again.';
+        });
+    }
+
+    function displayTranslations(translations) {
+        const languageTabs = document.getElementById('languageTabs');
+        const translationsContainer = document.getElementById('translations');
+        languageTabs.innerHTML = '';
+        translationsContainer.innerHTML = '';
+
+        Object.entries(translations).forEach(([lang, info], index) => {
+            const button = document.createElement('button');
+            button.className = 'tablinks';
+            if (index === 0) button.id = 'defaultOpen';
+            button.innerHTML = `${info.flag} ${lang.toUpperCase()}`;
+            button.onclick = () => openTab(event, lang);
+            languageTabs.appendChild(button);
+
+            const content = document.createElement('div');
+            content.id = lang;
+            content.className = 'tabcontent';
+            content.innerHTML = `<p>${info.translation}</p>`;
+            translationsContainer.appendChild(content);
+        });
+        document.getElementById('defaultOpen').click();
+    }
+
+    function openTab(evt, langCode) {
+        var i, tabcontent, tablinks;
+        tabcontent = document.getElementsByClassName("tabcontent");
+        for (i = 0; i < tabcontent.length; i++) {
+            tabcontent[i].style.display = "none";
+        }
+        tablinks = document.getElementsByClassName("tablinks");
+        for (i = 0; i < tablinks.length; i++) {
+            tablinks[i].className = tablinks[i].className.replace(" active", "");
+        }
+        document.getElementById(langCode).style.display = "block";
+        evt.currentTarget.className += " active";
+    }
+
+    function updateGlucoseChart(glucoseReadings) {
+        const chartElement = document.getElementById('glucoseChart');
+        const currentGlucoseElement = document.getElementById('current-glucose');
+        const latestReading = glucoseReadings[0];
+        if (latestReading) {
+            currentGlucoseElement.textContent = `${latestReading.value} mg/dL`;
         }
 
-        function updateChart(glucoseReadings) {
-            console.log("Glucose Readings:", glucoseReadings);  // Log the readings for debugging
-
-            if (!Array.isArray(glucoseReadings) || glucoseReadings.length === 0) {
-                console.error("Invalid or empty glucose readings data");
-                return;
-            }
-
-            const ctx = document.getElementById('glucoseChart').getContext('2d');
-            const currentGlucose = document.getElementById('current-glucose');
-            
-            // Update current glucose display
-            const latestReading = glucoseReadings[0];
-            if (latestReading && typeof latestReading.value !== 'undefined') {
-                currentGlucose.textContent = `${latestReading.value} mg/dL`;
-                currentGlucose.style.color = getColor(latestReading.value);
-            } else {
-                console.error("Latest reading is invalid:", latestReading);
-                currentGlucose.textContent = "N/A";
-            }
-
-            // Prepare data for the chart
-            const chartData = {
-                labels: [],
+        glucoseChart = new Chart(chartElement, {
+            type: 'line',
+            data: {
                 datasets: [{
-                    label: 'GLUCOSE LEVEL (mg/dL)',
-                    data: [],
-                    borderColor: [],
-                    tension: 0.2,
-                    fill: true
-                }]
-            };
-
-            glucoseReadings.forEach((reading, index) => {
-                if (reading && typeof reading.time !== 'undefined' && typeof reading.value !== 'undefined') {
-                    chartData.labels.push(new Date(reading.time));
-                    chartData.datasets[0].data.push({
+                    label: 'Glucose Level (mg/dL)',
+                    data: glucoseReadings.map(reading => ({
                         x: new Date(reading.time),
                         y: reading.value
-                    });
-                    chartData.datasets[0].borderColor.push(getColor(reading.value));
-                } else {
-                    console.error(`Invalid reading at index ${index}:`, reading);
-                }
-            });
-
-            new Chart(ctx, {
-                type: 'line',
-                data: chartData,
-                options: {
-                    responsive: true,
-                    scales: {
-                        x: {
-                            type: 'time',
-                            time: {
-                                unit: 'minute',
-                                displayFormats: {
-                                    minute: 'HH:mm'
-                                }
-                            },
-                            title: {
-                                display: true,
-                                text: 'Time'
-                            }
-                        },
-                        y: {
-                            title: {
-                                display: true,
-                                text: 'Glucose Level (mg/dL)'
-                            },
-                            suggestedMin: 30,
-                            suggestedMax: 350
+                    })),
+                    borderColor: 'rgb(75, 192, 192)',
+                    tension: 0.1
+                }]
+            },
+            options: {
+                responsive: true,
+                scales: {
+                    x: {
+                        type: 'time',
+                        time: {
+                            unit: 'hour'
                         }
                     },
-                    plugins: {
-                        legend: {
-                            display: false
-                        }
+                    y: {
+                        beginAtZero: true
                     }
                 }
-            });
-        }
-
-        // Get the glucose readings from the data attribute
-        const glucoseDataElement = document.getElementById('glucose-data');
-        if (glucoseDataElement && glucoseDataElement.dataset.readings) {
-            try {
-                const glucoseReadings = JSON.parse(glucoseDataElement.dataset.readings);
-                updateChart(glucoseReadings);
-            } catch (error) {
-                console.error("Error parsing glucose readings:", error);
             }
-        } else {
-            console.error("Glucose data element or readings not found");
-        }
+        });
+    }
 
-        document.addEventListener('DOMContentLoaded', function() {
-            const svg = document.querySelector('svg');
-            svg.classList.add('pulse-animation');
+    function initializeChat() {
+        const chatMessages = document.getElementById('chat-messages');
+        const messageInput = document.getElementById('message-input');
+        const sendButton = document.getElementById('send-button');
+        const typingIndicator = document.getElementById('typing-indicator');
+
+        socket.on('connect', () => {
+            socket.emit('join', {username: username, room: emergencyToken});
         });
 
-        // Start the process when the page loads
-        window.onload = getLocationAndProcess;
+        socket.on('status', data => addStatusMessage(data.msg));
+        socket.on('message', data => addChatMessage(data.username, data.msg));
+        socket.on('typing', data => {
+            if (data.username !== username) {
+                typingIndicator.textContent = data.typing ? `${data.username} is typing...` : '';
+            }
+        });
 
-        
-    </script>
+        sendButton.addEventListener('click', sendMessage);
+        messageInput.addEventListener('keypress', e => {
+            if (e.key === 'Enter') sendMessage();
+        });
+
+
+    function sendMessage() {
+        const message = messageInput.value.trim();
+        if (message) {
+            socket.emit('message', {username: username, msg: message, room: emergencyToken});
+            addChatMessage('You', message);
+            messageInput.value = '';
+        }
+    }
+
+    function addStatusMessage(message) {
+        const statusElement = document.createElement('div');
+        statusElement.className = 'system-message';
+        statusElement.textContent = message;
+        chatMessages.appendChild(statusElement);
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+    }
+
+    function addChatMessage(sender, message) {
+        const chatMessages = document.getElementById('chat-messages');
+        const messageElement = document.createElement('div');
+        const isOwnMessage = sender === username || sender === 'You';
+        messageElement.className = 'message ' + (isOwnMessage ? 'user-message' : 'contact-message');
+        messageElement.innerHTML = `<div class="message-bubble"><strong>${sender}:</strong> ${message}</div>`;
+        chatMessages.appendChild(messageElement);
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+    }
+}
+
+initializePage();
+});
+</script>
 </body>
 </html>

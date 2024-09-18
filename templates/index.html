@@ -81,12 +81,10 @@
     </style>
 </head>
 <body class="bg-white-100 flex flex-col min-h-screen {% if dyslexia_friendly %}dyslexia-friendly{% endif %}">
-    
 {% block content %}
 <div class="absolute top-4 left-4">
     <a href="{{ url_for('about') }}" class="handwritten-link">About</a>
 </div>
-    
     <div class="absolute top-4 right-4">
         <button id="dyslexia-toggle" 
             class="handwritten-link py-2 px-4 rounded focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors duration-200 ease-in-out {{ 'bg-white-100 text-gray-700' if not dyslexia_friendly else 'bg-yellow-400 text-yellow-900' }}"
@@ -115,17 +113,32 @@
         </header>
     </div>
 
-    {% with messages = get_flashed_messages(with_categories=true) %}
+    <!-- {% with messages = get_flashed_messages(with_categories=true) %}
     {% if messages %}
         <div id="flash-message" class="rounded top-16 left-16 right-16 z-50">
             {% for category, message in messages %}
                 <div class="p-4 {% if category == 'error' %}bg-red-100 text-red-700{% elif category == 'success' %}bg-green-100 text-green-700{% else %}bg-blue-100 text-blue-700{% endif %}">
-                    {{ message }}
+                    {{ message }} -->
+                <!-- </div>
+            {% endfor %} -->
+        <!-- </div>
+    {% endif %}
+{% endwith %} -->
+
+    <div id="flash-messages">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="flash-message bg-{{ 'green' if category == 'success' else 'red' }}-100 border border-{{ 'green' if category == 'success' else 'red' }}-400 text-{{ 'green' if category == 'success' else 'red' }}-700 px-4 py-3 rounded relative mb-4" role="alert">
+                    <span class="block sm:inline">{{ message }}</span>
+                    <span class="absolute top-0 bottom-0 right-0 px-4 py-3">
+                        <svg class="fill-current h-6 w-6 text-{{ 'green' if category == 'success' else 'red' }}-500" role="button" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><title>Close</title><path d="M14.348 14.849a1.2 1.2 0 0 1-1.697 0L10 11.819l-2.651 3.029a1.2 1.2 0 1 1-1.697-1.697l2.758-3.15-2.759-3.152a1.2 1.2 0 1 1 1.697-1.697L10 8.183l2.651-3.031a1.2 1.2 0 1 1 1.697 1.697l-2.758 3.152 2.758 3.15a1.2 1.2 0 0 1 0 1.698z"/></svg>
+                    </span>
                 </div>
             {% endfor %}
-        </div>
-    {% endif %}
-{% endwith %}
+        {% endif %}
+    {% endwith %}
+    </div>
 
     <main class="bg-white shadow-md rounded px-8 pt-6 pb-8 mb-4">
         <div class="mb-6 text-gray-700">
@@ -140,6 +153,7 @@
                 <li>{{ t['step2'] }}</li>
                 <li>{{ t['step3'] }}</li>
                 <li>{{ t['step4'] }}</li>
+                <li>{{ t['step5'] }}</li>
             </ol>
         </div>
 
@@ -161,13 +175,6 @@
         <img src="/static/mascota.png" alt="Search dog on map" class="w-11/12 sm:w-4/5 md:w-3/4 lg:w-3/5 xl:w-1/2 h-auto object-cover mx-auto mb-0 relative z-48 opacity-85"
         />
     </div>
-    <!-- <footer class="bg-white" >
-        <div class="max-w-7xl text-center py-6 px-4 sm:px-6 lg:px-8 relative z-0">
-                Made with <span class="text-blue-500 pulse-animation inline-block">♥</span> 
-                <br>© 2024 IreAV. All rights reserved.
-            </p>
-        </div>
-    </footer> -->
     <footer class="bg-white">
         <div class="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8 relative z-0">
             <p class="text-center text-sm text-gray-500">
@@ -184,15 +191,21 @@
             fetch('/toggle_dyslexia_friendly')
                 .then(() => location.reload());
         });
+    });     
+    document.addEventListener('DOMContentLoaded', function() {
+    // Handle flash messages
+        var flashMessages = document.querySelectorAll('.flash-message');
+        flashMessages.forEach(function(message) {
+            message.querySelector('svg').addEventListener('click', function() {
+                message.remove();
+            });
+
+            setTimeout(function() {
+                message.remove();
+            }, 5000);
+        });
     });
-    setTimeout(function() {
-                var flashMessage = document.getElementById('flash-message');
-                flashMessage.style.transition = 'opacity 1s';
-                flashMessage.style.opacity = '0';
-                setTimeout(function() {
-                    flashMessage.style.display = 'none';
-                }, 1000);
-            }, 5000);  // 5000 milliseconds = 5 seconds
+
     document.addEventListener('DOMContentLoaded', function() {
     const alertIcon = document.querySelector('.flex.items-center svg');
     alertIcon.classList.add('pulse-animation');
