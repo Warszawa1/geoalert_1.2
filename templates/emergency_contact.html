@@ -86,10 +86,10 @@
             </p>
         </div>
     </footer>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
 
-    <script>
-    document.addEventListener('DOMContentLoaded', function() {
+<script>
+document.addEventListener('DOMContentLoaded', function() {
     const isEmergencyContact = document.body.dataset.isEmergencyContact === 'true';
     const emergencyToken = document.body.dataset.emergencyToken;
     let username = document.body.dataset.username;
@@ -105,7 +105,11 @@
     }
 
     function initializeChat() {
-        socket = io();
+        socket = io({
+            path: '/socket.io',
+            transports: ['websocket', 'polling']
+        });
+
         const chatMessages = document.getElementById('chat-messages');
         const messageInput = document.getElementById('message-input');
         const sendButton = document.getElementById('send-button');
@@ -138,11 +142,14 @@
     function sendMessage() {
         const messageInput = document.getElementById('message-input');
         const message = messageInput.value.trim();
-        if (message) {
+        if (message && socket && socket.connected) {
             console.log('Sending message:', message);
             socket.emit('message', {username: username, msg: message, room: emergencyToken});
             addChatMessage('You', message);
             messageInput.value = '';
+        } else if (!socket || !socket.connected) {
+            console.error('Socket is not connected. Unable to send message.');
+            addStatusMessage('Unable to send message. Please check your connection.');
         }
     }
 
