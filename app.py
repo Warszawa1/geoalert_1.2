@@ -36,7 +36,7 @@ logger = logging.getLogger(__name__)
 app = Flask(__name__)
 app.secret_key = os.getenv('SECRET_KEY', 'your_fallback_secret_key')
 oauth = OAuth(app)
-socketio = SocketIO(app, manage_session=False)
+socketio = SocketIO(app, async_mode=None)
 
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'your_fallback_secret_key')  # Replace with a real secret key
 app.config['MAIL_SERVER'] = os.getenv('MAIL_SERVER')
@@ -1094,7 +1094,6 @@ app.secret_key = os.getenv('SECRET_KEY', 'your_fallback_secret_key')
 if __name__ == '__main__':
     with app.app_context():
         init_db()
-        app.run(host='0.0.0.0', port=5000, debug=True)
-
+        app.run()
         # socketio.run(app, debug=True, host='0.0.0.0', port=5000)
 
