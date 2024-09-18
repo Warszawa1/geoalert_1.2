@@ -2,6 +2,7 @@
 import uuid
 from flask import Flask, render_template, jsonify, request, session, redirect, url_for, flash
 from flask_socketio import SocketIO, emit, join_room, leave_room
+from flask_cors import CORS
 from werkzeug.security import generate_password_hash, check_password_hash
 from authlib.integrations.flask_client import OAuth
 import json
@@ -36,7 +37,8 @@ logger = logging.getLogger(__name__)
 app = Flask(__name__)
 app.secret_key = os.getenv('SECRET_KEY', 'your_fallback_secret_key')
 oauth = OAuth(app)
-socketio = SocketIO(app, async_mode=None)
+CORS(app)
+socketio = SocketIO(app, cors_allowed_origins="*", async_mode=None)
 
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'your_fallback_secret_key')  # Replace with a real secret key
 app.config['MAIL_SERVER'] = os.getenv('MAIL_SERVER')
