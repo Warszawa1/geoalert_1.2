@@ -6,6 +6,10 @@ from flask_cors import CORS
 from werkzeug.security import generate_password_hash, check_password_hash
 from authlib.integrations.flask_client import OAuth
 import json
+import random
+import dns.resolver
+import asyncio
+import aiohttp
 import os
 import re
 from dotenv import load_dotenv
@@ -24,6 +28,10 @@ from pydexcom import Dexcom
 from datetime import date
 from email.message import EmailMessage
 from contextlib import closing
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
+from functools import wraps
+from requests.exceptions import RequestException
 
 from database import init_db, get_user, get_user_by_id, update_user
 
@@ -308,6 +316,88 @@ translations = {
 def change_language(lang):
     session['lang'] = lang
     return redirect(request.referrer or url_for('index'))
+
+class CustomDNSAdapter(HTTPAdapter):
+    def __init__(self, *args, **kwargs):
+        self.resolver = dns.resolver.Resolver(configure=False)
+        # Use Google's public DNS servers
+        self.resolver.nameservers = ['8.8.8.8', '8.8.4.4']
+        super().__init__(*args, **kwargs)
+
+    def send(self, request, **kwargs):
+        custom_url = self.get_custom_url(request.url)
+        request.url = custom_url
+        return super().send(request, **kwargs)
+
+    def get_custom_url(self, url):
+        parsed = requests.utils.urlparse(url)
+        host = parsed.hostname
+        if host:
+            try:
+                ip = self.resolver.resolve(host, 'A')[0].address
+                parsed = parsed._replace(netloc=f"{ip}:{parsed.port}" if parsed.port else ip)
+                return parsed.geturl()
+            except dns.resolver.NXDOMAIN:
+                return url
+        return url
+    
+
+def retry_with_backoff(retries=3, backoff_in_seconds=1):
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            x = 0
+            while True:
+                try:
+                    return func(*args, **kwargs)
+                except RequestException as e:
+                    if x == retries:
+                        raise
+                    else:
+                        sleep = (backoff_in_seconds * 2 ** x +
+                                random.uniform(0, 1))
+                        time.sleep(sleep)
+                        x += 1
+        return wrapper
+    return decorator
+
+# Use this decorator on your Dexcom API call function
+@retry_with_backoff(retries=5, backoff_in_seconds=1)
+def get_dexcom_data(username, password):
+    # Your existing get_dexcom_data implementation
+    pass
+
+def get_custom_session():
+    session = requests.Session()
+    retries = Retry(total=5, backoff_factor=0.1, status_forcelist=[500, 502, 503, 504])
+    adapter = CustomDNSAdapter(max_retries=retries)
+    session.mount('http://', adapter)
+    session.mount('https://', adapter)
+    return session
+
+# Use this session in your Dexcom API calls
+custom_session = get_custom_session()
+
+async def fetch_dexcom_data(username, password):
+    try:
+        # Note: This assumes Dexcom class is made async-compatible
+        async with Dexcom(username=username, password=password, ous=True) as dexcom:
+            glucose_readings = await dexcom.get_glucose_readings(minutes=60)
+
+        formatted_readings = [
+            {
+                'time': bg_value.datetime.strftime('%Y-%m-%d %H:%M:%S'),
+                'value': bg_value.value,
+                'trend': bg_value.trend_arrow
+            }
+            for bg_value in glucose_readings
+        ]
+
+        return formatted_readings, None
+    except aiohttp.ClientError as e:
+        return None, f"Network error: {str(e)}"
+    except Exception as e:
+        return None, f"Unexpected error: {str(e)}"
 
 
 def get_google_maps_link(lat, lon):
