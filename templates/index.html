@@ -15,8 +15,8 @@
 
         .handwritten-link {
             font-family: 'Caveat', cursive;
-            font-size: 1.3rem;
-            color: #555;
+            font-size: 1.45rem;
+            color: #3B82F6;
             text-decoration: none;
             border-bottom: 1px solid transparent;
             transition: border-color 0.3s ease;
@@ -31,7 +31,7 @@
             height: 1px;
             bottom: -1px;
             left: 5px;;
-            background-color: #555;
+            background-color: #3B82F6;
             transform: scaleX(0);
             transform-origin: bottom right;
             transition: transform 0.3s ease;
@@ -49,7 +49,7 @@
                 transform: scale(1);
             }
             50% {
-                transform: scale(1.24);
+                transform: scale(1.1);
             }
         }
         .circle-pulse {
@@ -112,18 +112,6 @@
             </div>
         </header>
     </div>
-
-    <!-- {% with messages = get_flashed_messages(with_categories=true) %}
-    {% if messages %}
-        <div id="flash-message" class="rounded top-16 left-16 right-16 z-50">
-            {% for category, message in messages %}
-                <div class="p-4 {% if category == 'error' %}bg-red-100 text-red-700{% elif category == 'success' %}bg-green-100 text-green-700{% else %}bg-blue-100 text-blue-700{% endif %}">
-                    {{ message }} -->
-                <!-- </div>
-            {% endfor %} -->
-        <!-- </div>
-    {% endif %}
-{% endwith %} -->
 
     <div id="flash-messages">
         {% with messages = get_flashed_messages(with_categories=true) %}

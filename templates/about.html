@@ -15,8 +15,8 @@
 
         .handwritten-link {
             font-family: 'Caveat', cursive;
-            font-size: 1.35rem;
-            color: #555;
+            font-size: 1.45rem;
+            color: #3B82F6;
             text-decoration: none;
             border-bottom: 1px solid transparent;
             transition: border-color 0.3s ease;
@@ -31,7 +31,7 @@
             height: 1px;
             bottom: -1px;
             left: 0;
-            background-color: #555;
+            background-color: #3B82F6;
             transform: scaleX(0);
             transform-origin: bottom right;
             transition: transform 0.3s ease;
@@ -133,27 +133,32 @@
         <a href="{{ url_for('about', lang='en') }}" id="boton-ingles" class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">EN</a>
     {% endif %}
 </div>
-<div class="container mx-auto px-4 pt-20 pb-0 sm:pt-10 sm:pb-2 flex-grow" id="titulo">
 
 
-<!-- <main class="bg-white shadow-md rounded px-4 sm:px-8 pt-6 pb-8 mb-4 max-w-2xl mx-auto"> -->
-    <h1 class="text-3xl text-center font-bold mb-2">About Us</h1>
-    <div class="grid grid-cols-1 md:grid-cols-2 pt-4 gap-8">
-        <div>
-            <p class="mb-4">
-                Hey, we are Chapo and Ire 🐺👾<br><br>
-                Welcome to this web!
-                An idea that was going on in my mind for a few years. Today I am determined to finish it, even if a couple of friends and I will be the only users.
-                I am aware that sometimes "shit happens" and we cannot rely on our smartphones, we are abroad, we are not feeling well...
-                <br>That knowledge comes from almost 2 decades living with diabetes type 1 and many occasions when I thought how helpful something like this would be.
-                <br>My passion for failing, adjusting and learning will help me to advance, since I am no expert but a determined begginer with my own "itch to scratch".
-            </p>
-            <p class="mb-4">
-                I hope this idea gets to help someone, and a difficult time get to be a bit easier.
-            </p>
-        </div>
+<div class="container mx-auto px-4 pt-20 pb-0 flex-grow" id="titulo">
+    <h1 class="text-3xl text-center font-bold mb-2"></h1>
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-2 max-w-6xl mx-auto">
+        <section class="bg-white rounded-lg shadow-md p-4">
+            <h1 class="text-2xl font-bold text-center mb-4">Welcome to this Emergency Alert System! 🚨</h1>
+            
+            <p class="text-lg mb-4 pt-6">Hello, I'm Irene 👩‍💻</p>
+            
+            <p class="text-lg mb-4">This website is the result of an idea that's been brewing for a few years. Today, I am bringing it to life, even if the initial user base is just a handful of friends and family.</p>
+            
+            <h2 class="text-xl font-semibold mt-6 mb-3">Why I Created This</h2>
+            <p class="text-lg mb-4">Life can be unpredictable. Sometimes we can't rely on our smartphones, we're in unfamiliar places, or we're not feeling our best. With nearly two decades of living with Type 1 Diabetes, I've often thought how helpful a tool like this could be in challenging situations.</p>
+            
+            <p class="text-lg mb-4">I am not expert, but I'm committed to learning and improving. This project is my way of addressing a real need I've experienced firsthand.</p>
+            
+            <p class="text-lg mb-4">🐾 Fun fact: All the black dogs you'll spot on this website are somehow inspired by my dog Chapo. He's been an incredible support throughout this journey, so I felt he deserved a starring role here 🐺</p>
+            
+            <h2 class="text-xl font-semibold mt-6 mb-3">My Hope</h2>
+            <p class="text-lg mb-4">I hope this system can make difficult times a little easier for someone out there. It's a small step, but one I believe is worth taking.</p>
+            
+            <p class="text-lg font-semibold mt-8">Thank you for visiting. I'm glad you're here!</p>
+        </section>
         
-        <div class="mb-6">
+        <div class="bg-white rounded-lg shadow-md p-6">
             {% with messages = get_flashed_messages(with_categories=true) %}
                 {% if messages %}
                     {% for category, message in messages %}
@@ -163,27 +168,27 @@
                     {% endfor %}
                 {% endif %}
             {% endwith %}
-            <h2 class="text-2xl font-semibold text-gray-800 mb-2">Contact form</h2>
+            <h2 class="text-2xl font-semibold text-gray-800 mb-4">Contact form</h2>
             <form method="POST" action="{{ url_for('about') }}">
                 <div class="mb-4">
-                    <label class="block text-gray-700 text-sm font-bold mb-2" for="name">
+                    <label class="block text-gray-700 font-bold mb-2" for="name">
                         Name:
                     </label>
                     <input class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" id="name" name="name" type="text" required>
                 </div>
                 <div class="mb-4">
-                    <label class="block text-gray-700 text-sm font-bold mb-2" for="email">
+                    <label class="block text-gray-700 font-bold mb-2" for="email">
                         Email:
                     </label>
                     <input class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" id="email" name="email" type="email" required>
                 </div>
                 <div class="mb-6">
-                    <label class="block text-gray-700 text-sm font-bold mb-2" for="message">
+                    <label class="block text-gray-700 font-bold mb-2" for="message">
                         Message:
                     </label>
                     <textarea class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" id="message" name="message" rows="4" required></textarea>
                 </div>
-                <div class="flex justify-center space-x-4">
+                <div class="flex justify-center">
                     <button class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline" type="submit">
                         Send 📮
                     </button>
@@ -195,7 +200,10 @@
 
 
 
-<div class="image-container mt-4 mb-8">
+
+
+
+<div class="image-container mt-4 mb-8 p-4">
     <img src="/static/first_step.png" alt="Search dog on map" class="responsive-image w-11/12 sm:w-4/5 md:w-3/4 lg:w-3/5 xl:w-1/2 h-auto object-cover relative"/>
     <div class="image-overlay" >
         <div class="overlay-text">
@@ -221,10 +229,6 @@
             fetch('/toggle_dyslexia_friendly')
                 .then(() => location.reload());
         });
-    });
-    document.addEventListener('DOMContentLoaded', function() {
-    const alertIcon = document.querySelector('.flex.items-center svg');
-    alertIcon.classList.add('pulse-animation');
     });
     document.addEventListener('DOMContentLoaded', function() {
         var flashMessage = document.getElementById('flash-message');

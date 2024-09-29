@@ -1,7 +1,6 @@
 #V6 with email alert, dexcom integration, dinamic map, optional sms,
 import uuid
 from flask import Flask, render_template, jsonify, request, session, redirect, url_for, flash
-from flask_socketio import SocketIO, emit, join_room, leave_room
 from flask_cors import CORS
 from werkzeug.security import generate_password_hash, check_password_hash
 from authlib.integrations.flask_client import OAuth
@@ -40,7 +39,6 @@ app = Flask(__name__)
 app.secret_key = os.getenv('SECRET_KEY', 'your_fallback_secret_key')
 oauth = OAuth(app)
 CORS(app)
-socketio = SocketIO(app, cors_allowed_origins="*", async_mode=None)
 
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'your_fallback_secret_key')  # Replace with a real secret key
 app.config['MAIL_SERVER'] = os.getenv('MAIL_SERVER')
@@ -473,7 +471,7 @@ def index():
     lang = request.args.get('lang', 'en')
     if lang not in translations:
         lang = 'en'
-        user = {
+    user = {
         'is_diabetic': True,
         'uses_dexcom': False
     }
@@ -526,13 +524,6 @@ def emergency():
     if not user:
         return "User not found", 404
     
-    # Generate emergency token if it doesn't exist
-    if not user.get('emergency_token'):
-        emergency_token = generate_emergency_token()
-        update_user_emergency_token(user['id'], emergency_token)
-    else:
-        emergency_token = user['emergency_token']
-    
     show_glucose_section = False
     glucose_data = None
     
@@ -556,8 +547,7 @@ def emergency():
                             user=user, 
                             show_glucose_section=show_glucose_section,
                             glucose_data=glucose_data,
-                            is_emergency_contact=False,
-                            emergency_token=user['emergency_token'])
+                            is_emergency_contact=False)
 
 
 
@@ -663,7 +653,6 @@ def update_location():
     username = data['username']
     latitude = data['latitude']
     longitude = data['longitude']
-    # send_alert = data.get('send_alert', False)
     send_update = data.get('send_update', False)
 
     if not username or latitude is None or longitude is None:
@@ -928,101 +917,6 @@ def get_or_create_emergency_token(user_id):
         conn.close()
 
 
-@socketio.on('connect')
-def handle_connect():
-    logging.info(f"New client connected: {request.sid}")
-    emit('status', {'msg': 'Connected to the server.'})
-
-
-@socketio.on('join')
-def on_join(data):
-    try:
-        username = data.get('username')
-        room = data.get('room')
-        if not username or not room:
-            raise ValueError("Username and room are required")
-
-        join_room(room)
-        session['username'] = username
-        session['room'] = room
-        logging.info(f"User {username} joined room {room}")
-        emit('status', {'msg': f'{username} has entered the emergency chat.'}, room=room)
-    except Exception as e:
-        logging.error(f"Error in on_join: {str(e)}")
-        emit('error', {'message': 'Failed to join the room. Please try again.'})
-
-
-@socketio.on('message')
-def handle_message(data):
-    try:
-        room = data.get('room')
-        username = data.get('username')
-        msg = data.get('msg')
-        is_emergency_contact = data.get('is_emergency_contact', False)
-
-        if not all([room, username, msg]):
-            raise ValueError("Room, username, and message are required")
-
-        display_name = "Emergency Contact" if is_emergency_contact else username
-        logging.info(f"Message in room {room} from {display_name}: {msg[:50]}...")
-        emit('message', {'username': display_name, 'msg': msg}, room=room, include_self=False)
-    except Exception as e:
-        logging.error(f"Error in handle_message: {str(e)}")
-        emit('error', {'message': 'Failed to send message. Please try again.'})
-
-
-@socketio.on('leave')
-def on_leave(data):
-    try:
-        username = data.get('username')
-        room = data.get('room')
-        if not username or not room:
-            raise ValueError("Username and room are required")
-
-        leave_room(room)
-        session.pop('username', None)
-        session.pop('room', None)
-        logging.info(f"User {username} left room {room}")
-        emit('status', {'msg': f'{username} has left the emergency chat.'}, room=room)
-    except Exception as e:
-        logging.error(f"Error in on_leave: {str(e)}")
-        emit('error', {'message': 'Failed to leave the room. Please try again.'})
-
-
-@socketio.on('typing')
-def on_typing(data):
-    try:
-        room = data.get('room')
-        username = data.get('username')
-        is_typing = data.get('typing')
-        if not all([room, username, is_typing is not None]):
-            raise ValueError("Room, username, and typing status are required")
-
-        emit('typing', {'username': username, 'typing': is_typing}, room=room, include_self=False)
-    except Exception as e:
-        logging.error(f"Error in on_typing: {str(e)}")
-
-
-@socketio.on('disconnect')
-def on_disconnect():
-    username = session.get('username')
-    room = session.get('room')
-    if username and room:
-        logging.info(f"User {username} disconnected from room {room}")
-        emit('status', {'msg': f'{username} has disconnected.'}, room=room)
-        leave_room(room)
-    session.clear()
-
-
-@socketio.on_error()
-def error_handler(e):
-    logging.error(f"SocketIO error: {str(e)}")
-    emit('error', {'message': 'An unexpected error occurred. Please try again.'})
-
-
-# generates the token necessary for the chat link
-def generate_emergency_token():
-    return str(uuid.uuid4())
 
 def get_user_by_emergency_token(token):
     conn, cur = get_db_connection()
@@ -1052,15 +946,15 @@ def send_alert(user, lat, lon, is_update=False, glucose_readings=None):
             alert_message += f"\nCustom message: {user['alert_message']}"
 
 
-        # Get or create the emergency token for this user
-        emergency_token = get_or_create_emergency_token(user['id'])
+        # # Get or create the emergency token for this user
+        # emergency_token = get_or_create_emergency_token(user['id'])
 
-        # Create the emergency access link
-        emergency_link = url_for('emergency_contact', token=emergency_token, _external=True)
-        alert_message += f"\n\nEmergency Contact Access:\n"
-        alert_message += f"To view the ongoing chat and provide assistance, please use this link:\n"
-        alert_message += f"{emergency_link}\n"
-        alert_message += f"This link provides temporary access to the emergency chat. Please keep it confidential.\n"
+        # # Create the emergency access link
+        # emergency_link = url_for('emergency_contact', token=emergency_token, _external=True)
+        # alert_message += f"\n\nEmergency Contact Access:\n"
+        # alert_message += f"To view the ongoing chat and provide assistance, please use this link:\n"
+        # alert_message += f"{emergency_link}\n"
+        # alert_message += f"This link provides temporary access to the emergency chat. Please keep it confidential.\n"
         
         send_email_alert(alert_message, user['emergency_contacts'])
         
@@ -1098,6 +992,5 @@ app.secret_key = os.getenv('SECRET_KEY', 'your_fallback_secret_key')
 if __name__ == '__main__':
     with app.app_context():
         init_db()
-        # app.run()
-        socketio.run(app, debug=True)
+    app.run(debug=True)
 

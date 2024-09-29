@@ -12,7 +12,7 @@
     <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
     <style>
-        .system-message { color: #888; font-style: italic; font-size: 0.92rem; margin-bottom: 4px; }
+        /* .system-message { color: #888; font-style: italic; font-size: 0.92rem; margin-bottom: 4px; }
         .chat-container { height: calc(100vh - 200px); }
         .message { max-width: 80%; margin-bottom: 10px; clear: both; }
         .user-message { float: right; }
@@ -37,7 +37,7 @@
             font-style: italic;
             margin: 10px 0;
             font-size: 0.9em;
-        }
+        } */
         .pulse-animation {
             animation: pulse 3s infinite;
         }
@@ -98,7 +98,7 @@
                             <button id="confirm-location" class="bg-green-600 text-white px-3 py-2 rounded">Confirm Location</button>
                         </div>
 
-                        <div class="emergency-chat mt-4 bg-white shadow-sm overflow-hidden">
+                        <!-- <div class="emergency-chat mt-4 bg-white shadow-sm overflow-hidden">
                             <div class="emergency-chat-header p-4 bg-blue-500 text-white font-bold">Emergency Chat</div>
                             <div id="chat-messages" class="h-48 overflow-y-auto p-4"></div>
                             <div id="typing-indicator" class="text-xs text-gray-500 px-4 py-2"></div>
@@ -106,7 +106,7 @@
                                 <input type="text" id="message-input" class="w-full px-2 py-1 border rounded text-sm" placeholder="Type your message...">
                                 <button id="send-button" class="mt-2 bg-blue-500 text-white px-4 py-2 rounded">Send</button>
                             </div>
-                        </div>
+                        </div> -->
                     </div>
                     <div id="glucose-section" class="bg-white shadow overflow-hidden sm:rounded-lg mt-4">
                         <div class="px-4 py-5 sm:p-6">
@@ -145,7 +145,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     function initializePage() {
         getCurrentLocation();
-        initializeChat();
+        // initializeChat();
     }
 
 
@@ -347,61 +347,61 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    function initializeChat() {
-        socket = io({
-            path: '/socket.io',
-            transports: ['websocket', 'polling']
-        });
-        const chatMessages = document.getElementById('chat-messages');
-        const messageInput = document.getElementById('message-input');
-        const sendButton = document.getElementById('send-button');
-        const typingIndicator = document.getElementById('typing-indicator');
+    // function initializeChat() {
+    //     socket = io({
+    //         path: '/socket.io',
+    //         transports: ['websocket', 'polling']
+    //     });
+    //     const chatMessages = document.getElementById('chat-messages');
+    //     const messageInput = document.getElementById('message-input');
+    //     const sendButton = document.getElementById('send-button');
+    //     const typingIndicator = document.getElementById('typing-indicator');
 
-        socket.on('connect', () => {
-            socket.emit('join', {username: username, room: emergencyToken});
-        });
+    //     socket.on('connect', () => {
+    //         socket.emit('join', {username: username, room: emergencyToken});
+    //     });
 
-        socket.on('status', data => addStatusMessage(data.msg));
-        socket.on('message', data => addChatMessage(data.username, data.msg));
-        socket.on('typing', data => {
-            if (data.username !== username) {
-                typingIndicator.textContent = data.typing ? `${data.username} is typing...` : '';
-            }
-        });
+    //     socket.on('status', data => addStatusMessage(data.msg));
+    //     socket.on('message', data => addChatMessage(data.username, data.msg));
+    //     socket.on('typing', data => {
+    //         if (data.username !== username) {
+    //             typingIndicator.textContent = data.typing ? `${data.username} is typing...` : '';
+    //         }
+    //     });
 
-        sendButton.addEventListener('click', sendMessage);
-        messageInput.addEventListener('keypress', e => {
-            if (e.key === 'Enter') sendMessage();
-        });
+    //     sendButton.addEventListener('click', sendMessage);
+    //     messageInput.addEventListener('keypress', e => {
+    //         if (e.key === 'Enter') sendMessage();
+    //     });
 
 
-    function sendMessage() {
-        const message = messageInput.value.trim();
-        if (message) {
-            socket.emit('message', {username: username, msg: message, room: emergencyToken});
-            addChatMessage('You', message);
-            messageInput.value = '';
-        }
-    }
+    // function sendMessage() {
+    //     const message = messageInput.value.trim();
+    //     if (message) {
+    //         socket.emit('message', {username: username, msg: message, room: emergencyToken});
+    //         addChatMessage('You', message);
+    //         messageInput.value = '';
+    //     }
+    // }
 
-    function addStatusMessage(message) {
-        const statusElement = document.createElement('div');
-        statusElement.className = 'system-message';
-        statusElement.textContent = message;
-        chatMessages.appendChild(statusElement);
-        chatMessages.scrollTop = chatMessages.scrollHeight;
-    }
+    // function addStatusMessage(message) {
+    //     const statusElement = document.createElement('div');
+    //     statusElement.className = 'system-message';
+    //     statusElement.textContent = message;
+    //     chatMessages.appendChild(statusElement);
+    //     chatMessages.scrollTop = chatMessages.scrollHeight;
+    // }
 
-    function addChatMessage(sender, message) {
-        const chatMessages = document.getElementById('chat-messages');
-        const messageElement = document.createElement('div');
-        const isOwnMessage = sender === username || sender === 'You';
-        messageElement.className = 'message ' + (isOwnMessage ? 'user-message' : 'contact-message');
-        messageElement.innerHTML = `<div class="message-bubble"><strong>${sender}:</strong> ${message}</div>`;
-        chatMessages.appendChild(messageElement);
-        chatMessages.scrollTop = chatMessages.scrollHeight;
-    }
-}
+    // function addChatMessage(sender, message) {
+    //     const chatMessages = document.getElementById('chat-messages');
+    //     const messageElement = document.createElement('div');
+    //     const isOwnMessage = sender === username || sender === 'You';
+    //     messageElement.className = 'message ' + (isOwnMessage ? 'user-message' : 'contact-message');
+    //     messageElement.innerHTML = `<div class="message-bubble"><strong>${sender}:</strong> ${message}</div>`;
+    //     chatMessages.appendChild(messageElement);
+    //     chatMessages.scrollTop = chatMessages.scrollHeight;
+    // }
+// }
 
 initializePage();
 });
