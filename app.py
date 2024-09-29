@@ -259,7 +259,6 @@ translations = {
         'title': 'Emergency Alert System',
         'subtitle': '⚠️',
         'description': "It does not matter who you are, your circumstances, or what you need help with. We all need assistance at some point, and that is why I created this web.",
-        # 'hope_message': "I hope you never need it, but in case you ever do, I wish it makes it all a bit easier.",
         'how_it_works': 'How it works:',
         'step1': 'Register for an account.',
         'step2': 'Set up your emergency information and contacts.',
@@ -282,7 +281,6 @@ translations = {
         'title': 'Sistema de Alerta de Emergencia',
         'subtitle': '⚠️',
         'description': "No importa quién seas, tus circunstancias o con que necesitas ayuda. Todos necesitamos asistencia en algún momento, y por eso he creado esta web.",
-        # 'hope_message': "Espero que nunca la necesites, pero en caso de que alguna vez lo hagas, que te facilite las cosas.",
         'how_it_works': 'Cómo funciona:',
         'step1': 'Regístrate para obtener una cuenta.',
         'step2': 'Configura tu información de emergencia y contactos.',
@@ -944,17 +942,6 @@ def send_alert(user, lat, lon, is_update=False, glucose_readings=None):
         
         if not is_update and user['alert_message']:
             alert_message += f"\nCustom message: {user['alert_message']}"
-
-
-        # # Get or create the emergency token for this user
-        # emergency_token = get_or_create_emergency_token(user['id'])
-
-        # # Create the emergency access link
-        # emergency_link = url_for('emergency_contact', token=emergency_token, _external=True)
-        # alert_message += f"\n\nEmergency Contact Access:\n"
-        # alert_message += f"To view the ongoing chat and provide assistance, please use this link:\n"
-        # alert_message += f"{emergency_link}\n"
-        # alert_message += f"This link provides temporary access to the emergency chat. Please keep it confidential.\n"
         
         send_email_alert(alert_message, user['emergency_contacts'])
         
