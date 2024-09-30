@@ -578,8 +578,9 @@ def get_emergency_info():
             country_code = 'CH'  # Default to Switzerland if detection fails
         
         target_languages = COUNTRY_LANGUAGES.get(country_code, ['en'])
-        if 'en' not in target_languages:
-            target_languages.append('en')  # Always include English
+        if 'en' in target_languages:
+            target_languages.remove('en')
+        target_languages.append('en')  # Ensure English is last
 
         most_spoken_language = target_languages[0]
 
