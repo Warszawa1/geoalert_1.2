@@ -1,4 +1,4 @@
-#V6 with email alert, dexcom integration, dinamic map, optional sms,
+#V5 with email alert, dexcom integration, dinamic map, optional sms,
 import uuid
 from flask import Flask, render_template, jsonify, request, session, redirect, url_for, flash
 from flask_cors import CORS
