@@ -1,4 +1,4 @@
-# Emergency Alert System
+# Emergency Alert System 🚨
 
 ## Overview
 This Emergency Alert System is a web application designed to help people in distress quickly get assistance. It allows users to create a personalized emergency profile, which can be accessed via a QR code. When scanned, this code displays the user's location and emergency information in the local language and English, facilitating quick and effective help from nearby individuals or emergency services.
@@ -11,6 +11,13 @@ This Emergency Alert System is a web application designed to help people in dist
 - Integration with Dexcom for diabetes management
 - Email and optional SMS alerts to emergency contacts
 - Dynamic map for location confirmation
+
+## QR for the web app deployed in render.com
+   ![frame](https://github.com/user-attachments/assets/8de54ec0-072c-4679-8830-9c190dc02402)
+
+## QR for my emergency link deployed in render.com
+   ![frame (1)](https://github.com/user-attachments/assets/4c7181e0-d662-4380-9c4b-36270fa1d836)
+
 
 ## Technologies Used
 - **Backend**: Flask (Python)
