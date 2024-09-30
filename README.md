@@ -12,11 +12,13 @@ This Emergency Alert System is a web application designed to help people in dist
 - Email and optional SMS alerts to emergency contacts
 - Dynamic map for location confirmation
 
+
 ## QR for the web app deployed in render.com
-   ![frame](https://github.com/user-attachments/assets/8de54ec0-072c-4679-8830-9c190dc02402)
+   ![frame](https://github.com/user-attachments/assets/1ff94ab2-e0f3-4619-b896-bdbc53105b7a)
 
 ## QR for my emergency link deployed in render.com
-   ![frame (1)](https://github.com/user-attachments/assets/4c7181e0-d662-4380-9c4b-36270fa1d836)
+   ![frame (1)](https://github.com/user-attachments/assets/bec77c41-947b-459d-938e-cc4eafc91d86)
+
 
 
 ## Technologies Used
