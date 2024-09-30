@@ -20,6 +20,10 @@ This Emergency Alert System is a web application designed to help people in dist
    ![frame (1)](https://github.com/user-attachments/assets/bec77c41-947b-459d-938e-cc4eafc91d86)
 
 
+![Screenshot 2024-09-30 at 11 29 33](https://github.com/user-attachments/assets/7cfaa1a3-e168-45b6-bdfc-ee77dd46432d)
+
+
+
 
 ## Technologies Used
 - **Backend**: Flask (Python)
@@ -84,3 +88,6 @@ Contributions to improve the Emergency Alert System are welcome. Please feel fre
 ---
 
 Made with care ♥ by IreAV
+
+
+
